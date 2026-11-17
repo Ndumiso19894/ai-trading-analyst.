@@ -16,7 +16,7 @@ The repository still contains the FastAPI backend, React/TypeScript dashboard, K
 - Offline risk calculation supports long and short positions with a user-entered contract multiplier or tick-size/tick-value pair. Account-currency conversion is not implemented.
 - User-started floating overlay service with overlay permission flow, foreground notification, drag/expand/collapse/stop, local saved-candle analysis, source provenance and instrument/timeframe labels.
 - Replaceable Android `MarketDataProvider` with a user-started Yahoo Finance unofficial chart request. Fetched bars are labeled historical, timestamped and stored locally; absent bid/ask is not synthesized. Delay, terms, limits and coverage (especially metals) remain unverified.
-- UTC-complete candle aggregation, multi-timeframe assessment across 5m/15m/30m/1h/4h/1d, and conservative WAIT gating for missing/neutral/opposing higher timeframe context. Aggregation from incomplete source buckets abstains.
+- UTC-complete candle aggregation and multi-timeframe assessment across 5m/15m/30m/1h/4h/1d. An available opposing higher-timeframe direction gates to WAIT; missing/neutral frames are disclosed but do not suppress a valid primary signal. Aggregation from incomplete source buckets abstains.
 - Native offline EMA 20/50 crossover backtest with ATR exits, explicit user price-unit spread/slippage/commission assumptions, same-bar stop-first handling, chronological 70/30 reporting, local Room history and equity-curve visualization. It is a baseline historical simulation, not a broker fill or account-currency model.
 - Generated launcher icon in Android adaptive and legacy density resources.
 

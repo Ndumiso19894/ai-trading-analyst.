@@ -74,6 +74,9 @@ not-a-time,1,2,0.5,1.5,3
         }
         val fourHour = aggregateCandles(base, "1h", "4h")
         assertEquals(2, fourHour.size)
+        val closedAtStartOfHourFour = completeCandlesAt(base, "1h", base[4].timestampMillis)
+        assertEquals(4, closedAtStartOfHourFour.size)
+        assertEquals(1, aggregateCandles(completeCandlesAt(base, "1h", base[4].timestampMillis + 60 * 60_000L), "1h", "4h").size)
         assertEquals(base[0].timestampMillis, fourHour[0].timestampMillis)
         assertClose(base[0].open, fourHour[0].open)
         assertClose(base[3].close, fourHour[0].close)
@@ -121,6 +124,25 @@ not-a-time,1,2,0.5,1.5,3
         assertEquals(zeroCost.full.totalTrades, costed.full.totalTrades)
         assertTrue(costed.full.netPnlPerUnit < zeroCost.full.netPnlPerUnit)
         assertTrue(costed.full.trades.all { it.entryIndex <= it.exitIndex && it.riskDistance > 0.0 })
+    }
+
+    @Test fun missingHigherTimeframesKeepPrimarySignalButLabelItUnconfirmed() {
+        val primary = AnalysisResult(
+            direction = Direction.BUY, price = 1.25, timestampMillis = 1_735_689_600_000L,
+            timeframe = "1h", dataSource = DataSourceKind.HISTORICAL, score = 3,
+            reason = "Bullish conditions meet the evidence threshold.", evidence = listOf("EMA alignment"),
+            conflicts = emptyList(), indicators = null, structure = null, zones = emptyList(),
+            entry = 1.25, stopLoss = 1.20, takeProfit = 1.35, rewardRisk = 2.0, instrument = "EUR/USD",
+        )
+        val context = MultiTimeframeResult(
+            "EUR/USD", "1h", listOf(TimeframeAssessment("1d", 0, null, "insufficient candles")),
+            "partial", "Daily data is unavailable.",
+        )
+        val result = MultiTimeframeAnalyzer.applyGate(primary, context)
+        assertEquals(Direction.BUY, result.direction)
+        assertEquals(1.25, result.entry!!, 0.0)
+        assertTrue(result.reason.contains("confirmation is incomplete"))
+        assertTrue(result.evidence.last().contains("1d"))
     }
 
     @Test fun conflictingHigherTimeframeSignalGatesDirectionalSetupToWait() {

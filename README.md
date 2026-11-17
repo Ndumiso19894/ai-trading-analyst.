@@ -15,7 +15,7 @@ GoldLens is the existing Android-first analysis project with a native Kotlin/Com
 - Offline risk calculator for long and short positions, requiring user-supplied broker contract size or tick specifications; account currency conversion is not implemented.
 - User-started, draggable/expandable overlay analyzing locally saved candles with source provenance, explicit overlay permission and foreground notification.
 - User-started historical chart retrieval through an unofficial Yahoo Finance adapter. Provider identity, fetch time, candle timestamp and caveats are shown; data is not represented as guaranteed-live and bid/ask is never invented. Coverage and licensing are unverified.
-- Strict complete-bucket UTC aggregation and multi-timeframe analysis with conservative WAIT gates for unavailable/neutral/opposing higher-timeframe context.
+- Strict complete-bucket UTC aggregation and multi-timeframe analysis: opposing available higher-timeframe directions gate to WAIT; missing/neutral frames are disclosed without suppressing a valid primary-timeframe signal. Analysis runs automatically after data import/fetch.
 - Offline EMA(20/50) crossover backtest with prior ATR exits, explicit user-entered costs, same-bar stop-first handling, 70/30 chronological reporting, local run history and equity curve. Results are per price unit and not broker fills or account-currency returns.
 - GoldLens launcher icon using Android adaptive and legacy launcher resources.
 

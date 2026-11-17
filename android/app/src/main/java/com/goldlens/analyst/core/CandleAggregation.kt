@@ -34,3 +34,10 @@ fun aggregateCandles(candles: List<Candle>, sourceTimeframe: String, targetTimef
 }
 
 fun timeframeDurationMillis(timeframe: String): Long? = FRAME_MILLIS[timeframe.lowercase()]
+
+/** Removes an in-progress candle by treating each timestamp as its UTC opening time. */
+fun completeCandlesAt(candles: List<Candle>, timeframe: String, nowMillis: Long): List<Candle> {
+    val duration = timeframeDurationMillis(timeframe) ?: return emptyList()
+    if (nowMillis <= 0L) return emptyList()
+    return candles.filter { it.timestampMillis <= nowMillis - duration }
+}

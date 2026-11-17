@@ -56,7 +56,7 @@ object MultiTimeframeAnalyzer {
         return MultiTimeframeResult(dataset.instrument, dataset.timeframe, assessments, agreement, explanation)
     }
 
-    /** Directional entries are gated by available larger-timeframe context. Missing context abstains. */
+    /** Conflicting available context blocks entries; unavailable frames are disclosed but do not erase a valid primary signal. */
     fun applyGate(primary: AnalysisResult, context: MultiTimeframeResult): AnalysisResult {
         if (primary.direction == Direction.WAIT) return primary
         val primaryDuration = timeframeDurationMillis(primary.timeframe) ?: return primary
@@ -64,19 +64,24 @@ object MultiTimeframeAnalyzer {
         if (higher.isEmpty()) return primary
         val missing = higher.filter { it.result == null || it.result.direction == Direction.WAIT }
         val opposing = higher.filter { it.result?.direction != null && it.result.direction != Direction.WAIT && it.result.direction != primary.direction }
-        if (missing.isEmpty() && opposing.isEmpty()) return primary
-        val reasons = buildList {
-            if (missing.isNotEmpty()) add("Higher-timeframe confirmation unavailable or neutral: ${missing.joinToString { it.timeframe }}.")
-            if (opposing.isNotEmpty()) add("Higher-timeframe direction conflicts: ${opposing.joinToString { "${it.timeframe} ${it.result?.direction}" }}.")
+        if (opposing.isNotEmpty()) {
+            val reason = "Higher-timeframe direction conflicts: ${opposing.joinToString { "${it.timeframe} ${it.result?.direction}" }}."
+            val missingNote = if (missing.isEmpty()) "" else " Additional higher-timeframe data is unavailable or neutral: ${missing.joinToString { it.timeframe }}."
+            return primary.copy(
+                direction = Direction.WAIT,
+                reason = "WAIT: $reason$missingNote",
+                conflicts = primary.conflicts + reason + missingNote,
+                entry = null,
+                stopLoss = null,
+                takeProfit = null,
+                rewardRisk = null,
+            )
         }
+        if (missing.isEmpty()) return primary
+        val note = "Primary ${primary.timeframe} ${primary.direction} signal; higher-timeframe confirmation is incomplete for ${missing.joinToString { it.timeframe }}. Review those frames when data is available."
         return primary.copy(
-            direction = Direction.WAIT,
-            reason = "WAIT: " + reasons.joinToString(" "),
-            conflicts = primary.conflicts + reasons,
-            entry = null,
-            stopLoss = null,
-            takeProfit = null,
-            rewardRisk = null,
+            reason = "${primary.reason} $note",
+            evidence = primary.evidence + note,
         )
     }
 }

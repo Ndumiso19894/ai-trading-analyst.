@@ -130,6 +130,16 @@ private fun GoldLensScreen(context: Context) {
     var riskContract by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
+    suspend fun analyzeAndSave(loaded: MarketDataset): Pair<AnalysisResult, MultiTimeframeResult> {
+        val (baseResult, mtf) = withContext(Dispatchers.Default) {
+            val base = AnalysisEngine.analyze(loaded)
+            base to MultiTimeframeAnalyzer.analyze(loaded)
+        }
+        val result = MultiTimeframeAnalyzer.applyGate(baseResult, mtf)
+        withContext(Dispatchers.IO) { database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() }) }
+        return result to mtf
+    }
+
     fun request(path: String, imageUri: Uri? = null) {
         scope.launch {
             isBusy = true
@@ -164,13 +174,16 @@ private fun GoldLensScreen(context: Context) {
                 }
                 val parsed = withContext(Dispatchers.Default) { CsvCandleParser.parse(content) }
                 val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "Imported OHLC CSV" } ?: "Imported OHLC CSV"
+                val loaded = MarketDataset(parsed.candles, DataSourceKind.IMPORTED_CSV, fileName, timeframe, System.currentTimeMillis(), instrument)
                 withContext(Dispatchers.IO) { database.replaceCandleSet(timeframe, parsed.candles, instrument, DataSourceKind.IMPORTED_CSV, fileName) }
-                dataset = MarketDataset(parsed.candles, DataSourceKind.IMPORTED_CSV, fileName, timeframe, System.currentTimeMillis(), instrument)
+                val (result, mtf) = analyzeAndSave(loaded)
+                dataset = loaded
                 providerSnapshot = null
-                analysis = null
-                multiTimeframe = null
+                analysis = result
+                multiTimeframe = mtf
                 risk = null
-                error = if (parsed.skippedRows > 0) "Loaded ${parsed.candles.size} valid candles; skipped ${parsed.skippedRows} invalid/duplicate rows." else "Loaded ${parsed.candles.size} valid candles."
+                val importStatus = if (parsed.skippedRows > 0) "Loaded ${parsed.candles.size} valid candles; skipped ${parsed.skippedRows} invalid/duplicate rows." else "Loaded ${parsed.candles.size} valid candles."
+                error = "$importStatus Signal: ${result.direction}. ${result.reason}"
             } catch (e: Exception) {
                 error = e.message ?: "CSV import failed."
             } finally { isBusy = false }
@@ -229,18 +242,13 @@ private fun GoldLensScreen(context: Context) {
     }
 
     fun analyzeOffline() {
-        val loaded = dataset ?: run { error = "Import an authorized OHLC CSV before analyzing."; return }
+        val loaded = dataset ?: run { error = "Fetch provider candles or import an authorized OHLC CSV before analyzing."; return }
         scope.launch {
             isBusy = true
             error = ""
             try {
                 val selected = loaded.copy(timeframe = timeframe, instrument = instrument)
-                val (baseResult, mtf) = withContext(Dispatchers.Default) {
-                    val base = AnalysisEngine.analyze(selected)
-                    base to MultiTimeframeAnalyzer.analyze(selected)
-                }
-                val result = MultiTimeframeAnalyzer.applyGate(baseResult, mtf)
-                withContext(Dispatchers.IO) { database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() }) }
+                val (result, mtf) = analyzeAndSave(selected)
                 dataset = selected
                 analysis = result
                 multiTimeframe = mtf
@@ -269,15 +277,17 @@ private fun GoldLensScreen(context: Context) {
             error = ""
             try {
                 val snapshot = withContext(Dispatchers.IO) { marketDataProvider.fetch(instrument, timeframe) }
+                val loaded = MarketDataset(snapshot.candles, snapshot.source, snapshot.sourceLabel, timeframe, snapshot.fetchedAtMillis, instrument)
                 withContext(Dispatchers.IO) {
                     database.replaceCandleSet(timeframe, snapshot.candles, instrument, snapshot.source, snapshot.sourceLabel)
                 }
+                val (result, mtf) = analyzeAndSave(loaded)
                 providerSnapshot = snapshot
-                dataset = MarketDataset(snapshot.candles, snapshot.source, snapshot.sourceLabel, timeframe, snapshot.fetchedAtMillis, instrument)
-                analysis = null
-                multiTimeframe = null
+                dataset = loaded
+                analysis = result
+                multiTimeframe = mtf
                 val candleAt = snapshot.candles.lastOrNull()?.timestampMillis?.let { java.time.Instant.ofEpochMilli(it).toString() } ?: "unknown time"
-                error = "Fetched ${snapshot.candles.size} provider candles; latest candle timestamp $candleAt. ${snapshot.note}"
+                error = "Fetched ${snapshot.candles.size} historical provider candles; signal ${result.direction} for $instrument · $timeframe · candle $candleAt. ${result.reason} ${snapshot.note}"
             } catch (e: Exception) {
                 providerSnapshot = null
                 error = e.message ?: "Market data unavailable; retry later or import a CSV."
@@ -492,7 +502,7 @@ private fun OverviewTab(
         Text("Candles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         CandlestickChart(dataset.candles, analysis?.zones.orEmpty(), analysis?.price)
         if (analysis == null) InfoCard("Candles are loaded locally. Run Analyze locally to calculate indicators and levels.", Gold)
-        else SignalSummary(analysis)
+        else SignalSummary(analysis, dataset)
         OutlinedButton(onClick = onRisk, modifier = Modifier.fillMaxWidth()) { Text("Open risk calculator") }
     }
 }
@@ -508,7 +518,7 @@ private fun AnalysisTab(analysis: AnalysisResult?, dataset: MarketDataset?, busy
         InfoCard("No analysis result yet. No signal or price has been fabricated.", Muted)
         return
     }
-    SignalSummary(analysis)
+    SignalSummary(analysis, dataset, showEvidence = false)
     val values = analysis.indicators
     if (values != null) {
         Text("Indicators · ${analysis.timeframe}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -538,7 +548,7 @@ private fun AnalysisTab(analysis: AnalysisResult?, dataset: MarketDataset?, busy
 }
 
 @Composable
-private fun SignalSummary(result: AnalysisResult) {
+private fun SignalSummary(result: AnalysisResult, dataset: MarketDataset?, showEvidence: Boolean = true) {
     val directionColor = when (result.direction) { Direction.BUY -> Green; Direction.SELL -> Red; Direction.WAIT -> Gold }
     Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -547,6 +557,7 @@ private fun SignalSummary(result: AnalysisResult) {
                 Text("${result.instrument} · ${result.timeframe} · ${result.dataSource.name}", color = Muted, style = MaterialTheme.typography.bodySmall)
             }
             result.price?.let { Text("Last candle close: ${price(it)}", style = MaterialTheme.typography.titleMedium) }
+            dataset?.let { Text("Source: ${it.sourceLabel} · candle age ${result.timestampMillis?.let(::candleAge) ?: "unknown"}", color = Muted, style = MaterialTheme.typography.bodySmall) }
             Text(result.reason, color = Muted)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SmallMetric("Entry", result.entry, Modifier.weight(1f))
@@ -554,6 +565,18 @@ private fun SignalSummary(result: AnalysisResult) {
                 SmallMetric("Target", result.takeProfit, Modifier.weight(1f))
                 SmallMetric("R:R", result.rewardRisk, Modifier.weight(1f))
             }
+            if (result.direction != Direction.WAIT) {
+                Text("Level method: entry uses the latest candle close; stop is 1.5 × ATR(14) away and target is 3 × ATR(14) away. R:R is theoretical before spread, slippage, commission and broker contract rules.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            if (showEvidence && result.evidence.isNotEmpty()) {
+                Text("Why this signal", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                result.evidence.take(4).forEach { BulletLine(it, Green) }
+            }
+            if (showEvidence && result.conflicts.isNotEmpty()) {
+                Text("Cautions / conflicting evidence", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                result.conflicts.take(4).forEach { BulletLine(it, Gold) }
+            }
+            Text("Evidence score ${result.score}; not a probability or a guarantee. This is analysis, not an order.", color = Muted, style = MaterialTheme.typography.labelSmall)
             if (result.timestampMillis != null) Text("Candle time: ${java.time.Instant.ofEpochMilli(result.timestampMillis)}", color = Muted, style = MaterialTheme.typography.labelSmall)
         }
     }

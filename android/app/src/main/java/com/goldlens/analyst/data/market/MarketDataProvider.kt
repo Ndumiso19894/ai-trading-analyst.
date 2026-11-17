@@ -2,6 +2,7 @@ package com.goldlens.analyst.data.market
 
 import com.goldlens.analyst.core.Candle
 import com.goldlens.analyst.core.aggregateCandles
+import com.goldlens.analyst.core.completeCandlesAt
 import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.normalizeCandles
 import org.json.JSONException
@@ -82,8 +83,11 @@ class YahooFinanceChartProvider(
         }
         if (candles.isEmpty()) throw MarketDataException("Provider returned no valid OHLC candles for $instrument.")
         val normalized = normalizeCandles(candles)
-        val requestedCandles = if (timeframe == "4h") aggregateCandles(normalized, "1h", "4h") else normalized
-        if (requestedCandles.isEmpty()) throw MarketDataException("Provider supplied no complete $timeframe candles for $instrument.")
+        val fetchedAtMillis = clockMillis()
+        val sourceTimeframe = if (timeframe == "4h") "1h" else timeframe
+        val closedSourceCandles = completeCandlesAt(normalized, sourceTimeframe, fetchedAtMillis)
+        val requestedCandles = if (timeframe == "4h") aggregateCandles(closedSourceCandles, "1h", "4h") else closedSourceCandles
+        if (requestedCandles.isEmpty()) throw MarketDataException("Provider supplied no complete, closed $timeframe candles for $instrument.")
         val meta = result.optJSONObject("meta") ?: JSONObject()
         val referencePrice = meta.finiteDouble("regularMarketPrice")
         val referenceTimestamp = meta.optLong("regularMarketTime", -1L).takeIf { it > 0 }?.times(1_000L)
@@ -93,7 +97,7 @@ class YahooFinanceChartProvider(
             candles = requestedCandles,
             source = DataSourceKind.HISTORICAL,
             sourceLabel = "Historical chart archive · $displayName · ${meta.optString("symbol", ticker)}",
-            fetchedAtMillis = clockMillis(),
+            fetchedAtMillis = fetchedAtMillis,
             providerReferencePrice = referencePrice,
             providerPriceTimestampMillis = referenceTimestamp,
             bid = meta.finiteDouble("bid"),
