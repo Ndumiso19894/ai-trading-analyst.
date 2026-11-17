@@ -570,7 +570,7 @@ private fun SignalSummary(result: AnalysisResult, dataset: MarketDataset?, confi
                 SmallMetric("Entry", result.entry, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
                 SmallMetric("Stop", result.stopLoss, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
                 SmallMetric("Target", result.takeProfit, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
-                SmallMetric("R:R", result.rewardRisk, Modifier.weight(1f))
+                SmallMetric("R:R", result.rewardRisk, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f), priceValue = false)
             }
             if (result.direction != Direction.WAIT) {
                 val stopDistance = InstrumentPrice.unitDistanceText(result.instrument, result.entry, result.stopLoss, configuredPointSize)
@@ -913,10 +913,10 @@ private fun IndicatorRow(
 }
 
 @Composable
-private fun SmallMetric(label: String, value: Double?, instrument: String, sourcePrecision: Int?, modifier: Modifier = Modifier) {
+private fun SmallMetric(label: String, value: Double?, instrument: String, sourcePrecision: Int?, modifier: Modifier = Modifier, priceValue: Boolean = true) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, color = Muted, style = MaterialTheme.typography.labelSmall)
-        Text(value?.let { formatPrice(it, instrument, sourcePrecision) } ?: "—", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+        Text(value?.let { if (priceValue) formatPrice(it, instrument, sourcePrecision) else String.format(java.util.Locale.US, "%.2f", it) } ?: "—", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
