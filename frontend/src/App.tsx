@@ -1,107 +1,62 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CandlestickSeries, ColorType, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 
-const NAV = [
-  'Dashboard',
-  'Market Overview',
-  'Trading Chart',
-  'Automatic Analysis',
-  'Screenshot Analysis',
-  'Trading Signals',
-  'Multi-Timeframe Analysis',
-  'Technical Indicators',
-  'Support and Resistance',
-  'Trade Calculator',
-  'Backtesting',
-  'Signal History',
-  'Performance Reports',
-  'Settings',
-] as const
+const NAV = ['Dashboard','Market Overview','Trading Chart','Automatic Analysis','Screenshot Analysis','Trading Signals','Multi-Timeframe Analysis','Technical Indicators','Support and Resistance','Trade Calculator','Backtesting','Signal History','Performance Reports','Settings'] as const
+type View = typeof NAV[number]
+type Candle = { time: number; timestamp: string; open: number; high: number; low: number; close: number; volume: number }
+type Analysis = { error?:string; signal:string; instrument?:string; timeframe:string; price:number; source?:string; data_timestamp?:string; reason:string; trend?:string; mtf_status?:string; entry?:number|null; stop_loss?:number|null; take_profit_1?:number|null; take_profit_2?:number|null; risk_reward?:number|null; indicators?:Record<string,number|null>; evidence?:string[]; conflicts?:string[]; levels?:{support:{price:number;strength:string;touches:number}[];resistance:{price:number;strength:string;touches:number}[]}; structure?:{trend:string;swing_highs:number[];swing_lows:number[]}; invalidation?:string }
+type ApiError={detail?:string}
 
-type Health = { status: string; app: string; version: string } | null
-
-export default function App() {
-  const [active, setActive] = useState<string>('Dashboard')
-  const [health, setHealth] = useState<Health>(null)
-  const [healthError, setHealthError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/health')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setHealth)
-      .catch((e) => setHealthError(String(e)))
-  }, [])
-
-  return (
-    <div className="app">
-      <aside className="sidebar">
-        <h1>AI Trading Analyst</h1>
-        <div className="sub">XAU/USD · Phase 1 foundation</div>
-        {NAV.map((item) => (
-          <button
-            key={item}
-            className={`nav-btn ${active === item ? 'active' : ''}`}
-            onClick={() => setActive(item)}
-          >
-            {item}
-          </button>
-        ))}
-      </aside>
-
-      <main className="main">
-        <h2>{active}</h2>
-
-        <div className="card">
-          <strong>Backend status</strong>
-          <div style={{ marginTop: 8 }}>
-            {health ? (
-              <span>
-                <span className="badge badge-buy">ONLINE</span>{' '}
-                <code>{health.app} v{health.version}</code>
-              </span>
-            ) : healthError ? (
-              <span className="muted">
-                Backend not reachable ({healthError}). Start it with{' '}
-                <code>cd backend &amp;&amp; python run.py</code>
-              </span>
-            ) : (
-              <span className="muted">Checking backend…</span>
-            )}
-          </div>
-        </div>
-
-        <div className="grid">
-          <div className="card">
-            <strong>Instrument</strong>
-            <div className="muted" style={{ marginTop: 6 }}>
-              XAU/USD (Gold) — first supported instrument.
-            </div>
-          </div>
-          <div className="card">
-            <strong>Signal</strong>
-            <div style={{ marginTop: 6 }}>
-              <span className="badge badge-wait">WAIT</span>
-            </div>
-            <div className="muted" style={{ marginTop: 6 }}>
-              Signal engine arrives in Phase 4. No fabricated prices are shown.
-            </div>
-          </div>
-          <div className="card">
-            <strong>Market data</strong>
-            <div className="muted" style={{ marginTop: 6 }}>
-              Free data integration arrives in Phase 2. CSV upload will be supported.
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <strong>Development roadmap</strong>
-          <p className="muted">
-            Phase 1: foundation (this screen) · Phase 2: market data · Phase 3: indicators ·
-            Phase 4: signal engine · Phase 5: screenshot analysis · Phase 6: backtesting ·
-            Phase 7: complete web app · Phase 8: Android.
-          </p>
-        </div>
-      </main>
-    </div>
-  )
+async function request<T>(url:string, init?:RequestInit):Promise<T>{
+  const res=await fetch(url,init); if(!res.ok){let detail=`HTTP ${res.status}`;try{detail=(await res.json() as ApiError).detail||detail}catch{} throw new Error(detail)} return res.json() as Promise<T>
 }
+function Badge({value}:{value:string}) { const cls=value==='BUY'?'buy':value==='SELL'?'sell':'wait'; return <span className={`badge ${cls}`}>{value}</span> }
+function Chart({data}:{data:Candle[]}) {
+  const ref=useRef<HTMLDivElement>(null); const chart=useRef<IChartApi|null>(null); const series=useRef<ISeriesApi<'Candlestick'>|null>(null)
+  useEffect(()=>{ if(!ref.current)return; const c=createChart(ref.current,{height:360,layout:{background:{type:ColorType.Solid,color:'#131722'},textColor:'#d1d4dc'},grid:{vertLines:{color:'#202431'},horzLines:{color:'#202431'}},rightPriceScale:{borderColor:'#343945'},timeScale:{borderColor:'#343945',timeVisible:true}}); const s=c.addSeries(CandlestickSeries,{upColor:'#089981',downColor:'#f23645',borderVisible:false,wickUpColor:'#089981',wickDownColor:'#f23645'}); chart.current=c;series.current=s; const resize=()=>c.applyOptions({width:ref.current?.clientWidth||600}); window.addEventListener('resize',resize);resize();return()=>{window.removeEventListener('resize',resize);c.remove();chart.current=null;series.current=null}},[])
+  useEffect(()=>{if(series.current&&data.length){series.current.setData(data.map(x=>({time:x.time as UTCTimestamp,open:x.open,high:x.high,low:x.low,close:x.close}))); chart.current?.timeScale().fitContent()}},[data])
+  return <div ref={ref} className="chart" />
+}
+function App(){
+  const [active,setActive]=useState<View>('Dashboard'); const [tf,setTf]=useState('1h'); const [candles,setCandles]=useState<Candle[]>([]); const [market,setMarket]=useState<{source:string;fetched_at:string;delayed?:boolean;history_note?:string|null}|null>(null); const [analysis,setAnalysis]=useState<Analysis|null>(null); const [multi,setMulti]=useState<Record<string,Analysis>>({}); const [multiAgreement,setMultiAgreement]=useState(''); const [signals,setSignals]=useState<any[]>([]); const [signalPerf,setSignalPerf]=useState<any>(null); const [result,setResult]=useState<any>(null); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const [risk,setRisk]=useState({entry:'',stop_loss:'',take_profit:'',account_balance:'10000',risk_percent:'1',contract_size:'1'}); const [riskOut,setRiskOut]=useState<any>(null)
+  const fail=(e:unknown)=>setError(e instanceof Error?e.message:String(e));
+  const loadMarket=useCallback(async()=>{setError('');setBusy(true);try{const x=await request<{candles:Candle[];source:string;fetched_at:string;delayed?:boolean}>(`/api/market/candles?timeframe=${tf}&period=3mo`);setCandles(x.candles);setMarket(x)}catch(e){fail(e)}finally{setBusy(false)}},[tf])
+  const loadAnalysis=useCallback(async()=>{setError('');setBusy(true);try{const x=await request<Analysis>(`/api/analysis?timeframe=${tf}&period=3mo`);setAnalysis(x)}catch(e){fail(e)}finally{setBusy(false)}},[tf])
+  const loadSignals=useCallback(async()=>{try{const x=await request<{signals:any[]}>(`/api/signals?limit=100`);setSignals(x.signals);setSignalPerf(await request('/api/signals/performance'))}catch(e){fail(e)}},[])
+  const refreshOutcomes=async()=>{setBusy(true);try{setResult(await request('/api/signals/refresh-outcomes',{method:'POST'}));await loadSignals()}catch(e){fail(e)}finally{setBusy(false)}}
+  const loadMulti=async()=>{setError('');setBusy(true);try{const x=await request<{timeframes:Record<string,Analysis>;agreement:string;assessment:string}>('/api/analysis/multi-timeframe');setMulti(x.timeframes);setMultiAgreement(x.assessment)}catch(e){fail(e)}finally{setBusy(false)}}
+  useEffect(()=>{if(['Dashboard','Market Overview','Trading Chart'].includes(active))void loadMarket()},[active,loadMarket])
+  useEffect(()=>{if(active==='Signal History'||active==='Trading Signals')void loadSignals()},[active,loadSignals])
+  const upload=async(url:string,file:File,method='POST')=>{const form=new FormData();form.append('file',file);return request<any>(url,{method,body:form})}
+  const onFile=async(e:React.ChangeEvent<HTMLInputElement>,kind:'analysis'|'backtest'|'screenshot'|'market')=>{const f=e.target.files?.[0];if(!f)return;setError('');setBusy(true);setResult(null);try{const u=kind==='analysis'?`/api/analysis/csv?timeframe=${tf}`:kind==='backtest'?`/api/backtest?timeframe=${tf}&spread=0.3&slippage=0.1`:kind==='market'?`/api/market/csv?timeframe=${tf}`:'/api/screenshot/analyze';const x=await upload(u,f);setResult(x);if(kind==='analysis')setAnalysis(x);if(kind==='market'){setCandles(x.candles);setMarket({source:x.source,fetched_at:x.fetched_at})}}catch(err){fail(err)}finally{setBusy(false);e.target.value=''}}
+  const calcRisk=async(e:React.FormEvent)=>{e.preventDefault();setError('');try{setRiskOut(await request('/api/risk/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(Object.entries(risk).map(([k,v])=>[k,Number(v)])))}))}catch(err){fail(err)}}
+  const indicators=useMemo(()=>analysis?.indicators||{},[analysis]);
+  const panel=(title:string,content:React.ReactNode)=><section className="panel"><h3>{title}</h3>{content}</section>
+  const buttons=<div className="toolbar"><label>Timeframe <select value={tf} onChange={e=>setTf(e.target.value)}>{['1m','5m','15m','30m','1h','4h','1d'].map(x=><option key={x}>{x}</option>)}</select></label><button onClick={()=>void loadMarket()} disabled={busy}>{busy?'Loading…':'Refresh market data'}</button><button className="secondary" onClick={()=>void loadAnalysis()} disabled={busy}>Analyze</button></div>
+  const info=market?<p className="muted">Source: {market.source} · downloaded {new Date(market.fetched_at).toLocaleString()} {market.delayed?'· provider data may be delayed':''} · {candles.length} candles {market.history_note&&`· ${market.history_note}`}</p>:<p className="muted">No market data loaded. Fetch source data or upload your own CSV; no sample prices are shown.</p>
+  const chartBlock=candles.length?<Chart data={candles}/>:<div className="empty">No candles available. Use Refresh market data, or try CSV upload. Provider access may be restricted or unavailable.</div>
+  const renderAnalysis=(a:Analysis|null)=>a?<><div className="signal-line"><Badge value={a.signal}/><b>{a.instrument||'XAU/USD'} · {a.timeframe}</b><span>Observed close: {fmt(a.price)}</span></div><p>{a.reason}</p><p className="muted">Data timestamp: {a.data_timestamp||'CSV time'} · Source: {a.source||'uploaded CSV'} · {a.trend} · higher timeframes: {a.mtf_status||'not checked'}</p><div className="grid">{[['Entry',a.entry],['Stop loss',a.stop_loss],['Target 1',a.take_profit_1],['Target 2',a.take_profit_2],['R:R',a.risk_reward]].map(([k,v])=><div className="metric" key={String(k)}><span>{k}</span><strong>{v==null?'—':typeof v==='number'?fmt(v):v}</strong></div>)}</div><div className="two-col"><div><h4>Supporting evidence</h4><ul>{(a.evidence||[]).map((x,i)=><li key={i}>{x}</li>)}</ul></div><div><h4>Conflicts / invalidation</h4><ul>{[...(a.conflicts||[]),a.invalidation].filter(Boolean).map((x,i)=><li key={i}>{x}</li>)}</ul></div></div></>:<div className="empty">No analysis yet. Request analysis after loading data.</div>
+  return <div className="app"><aside className="sidebar"><div className="brand"><span className="brand-icon">◈</span><div><b>GoldLens</b><small>TRADING ANALYST</small></div></div><div className="nav-label">WORKSPACE</div>{NAV.map((x,i)=><button key={x} className={`nav-btn ${active===x?'active':''}`} onClick={()=>setActive(x)}><span>{['▦','◉','⌁','⌕','▧','↗','⇄','◫','⌖','⊕','▤','◷','▥','⚙'][i]}</span>{x}</button>)}<div className="sidebar-bottom"><i/> Local analysis core<br/><small>No paid AI dependency</small></div></aside>
+    <main className="main"><header className="topbar"><div><span className="crumb">XAU/USD&nbsp; / &nbsp;{active}</span><h1>{active}</h1></div><div className="live-label"><i/> XAU/USD · data on demand</div></header>
+      {error&&<div className="alert" role="alert">{error}<button onClick={()=>setError('')}>×</button></div>}
+      {active==='Dashboard'&&<>{buttons}<div className="grid summary-grid"><div className="metric-card"><span>INSTRUMENT</span><b>Gold <small>XAU/USD</small></b><small>Spot symbol (provider dependent)</small></div><div className="metric-card"><span>LAST OBSERVED CLOSE</span><b>{candles.length?fmt(candles[candles.length-1].close):'—'}</b><small>{candles.length?`from ${market?.source}`:'Not yet retrieved'}</small></div><div className="metric-card"><span>ANALYST STATUS</span><b>{analysis?<Badge value={analysis.signal}/>:<Badge value="WAIT"/>}</b><small>{analysis?'Rule-based; see evidence':'Analyze available candles to generate'}</small></div></div>{panel('Market chart',<>{info}{chartBlock}</>)}{panel('Automatic assessment',<>{renderAnalysis(analysis)}<button className="secondary" onClick={()=>void loadAnalysis()} disabled={busy}>Run deterministic analysis</button></>)}<div className="disclaimer">Analysis is educational and may use delayed third-party data. It is not financial advice. Verify quotes and contract specifications with your broker.</div></>}
+      {active==='Market Overview'&&<>{buttons}{panel('Gold market data',<>{info}{chartBlock}<p className="muted">Offline CSV fallback · timestamp, open, high, low, close (volume optional)</p><input type="file" accept=".csv,text/csv" onChange={e=>void onFile(e,'market')}/></>)}{panel('Data source limitations',<p>Free Yahoo Finance chart endpoint, no key. Unofficial endpoint; rate limits and behavior may change. Quotes may be delayed and are not guaranteed executable. It has no SLA and its terms apply. CSV is the reliable offline fallback.</p>)}</>}
+      {active==='Trading Chart'&&<>{buttons}{panel('Candlestick chart',<>{info}{chartBlock}</>)}<div className="muted">Native time-based OHLC rendering. No technical data overlays until analysis data is available.</div></>}
+      {active==='Automatic Analysis'&&<>{buttons}{panel('Signal reasoning',<><p>Rule-based analysis of available candles. Requires 30+ bars; weak or conflicting evidence resolves to WAIT. This engine is deterministic and works without an AI service.</p><button onClick={()=>void loadAnalysis()} disabled={busy}>Run analysis</button>{renderAnalysis(analysis)}</>)}{panel('Analyze uploaded OHLC CSV',<><p className="muted">Required columns: timestamp, open, high, low, close; optional volume.</p><input type="file" accept=".csv,text/csv" onChange={e=>void onFile(e,'analysis')}/>{result?.signal&&renderAnalysis(result)}</>)}</>}
+      {active==='Screenshot Analysis'&&<>{panel('Chart screenshot assessment',<><p>Upload a PNG/JPEG. The local processor validates and samples image colors. It does not use OCR or a vision model, cannot identify exact prices or reliably recognize structure, and abstains from direction.</p><input type="file" accept="image/png,image/jpeg,.jpg,.jpeg" onChange={e=>void onFile(e,'screenshot')}/>{result?.method&&<div className="result-box"><Badge value={result.signal}/><p>{result.assessment}</p><p className="muted">{result.visual_summary?.width}×{result.visual_summary?.height} pixels · greenish sample {result.visual_summary?.greenish_pixels}, reddish sample {result.visual_summary?.reddish_pixels}</p><h4>Missing information</h4><ul>{result.missing_information?.map((x:string)=><li key={x}>{x}</li>)}</ul></div>}</>)}</>}
+      {active==='Trading Signals'&&<>{panel('Current signal',<>{buttons}{renderAnalysis(analysis)}{analysis&&<p className="muted">Persisted signal record #{(analysis as any).signal_id}</p>}</>)}{panel('Recent signals',signalList(signals))}</>}
+      {active==='Multi-Timeframe Analysis'&&<>{panel('Timeframe alignment',<><p>Runs independent data requests for daily, 4H, 1H and 15M. Provider outages are reported per timeframe; disagreements caution to WAIT.</p><button onClick={()=>void loadMulti()} disabled={busy}>Analyze multiple timeframes</button>{multiAgreement&&<div className="alert">Overall: {multiAgreement}</div>}<div className="grid">{Object.entries(multi).map(([k,a])=><div className="metric-card" key={k}><span>{k.toUpperCase()}</span><Badge value={a.signal||'WAIT'}/><p>{a.error||a.trend||a.reason}</p></div>)}</div></>)}</>}
+      {active==='Technical Indicators'&&<>{buttons}{panel('Indicator values',<><button className="secondary" onClick={()=>void loadAnalysis()}>Calculate on current provider candles</button>{analysis?<div className="grid indicator-grid">{Object.entries(indicators).map(([k,v])=><div className="metric" key={k}><span>{k.replace(/_/g,' ').toUpperCase()}</span><strong>{v==null?'warming up':Number(v).toFixed(4)}</strong></div>)}</div>:<div className="empty">No computed indicator values. Run analysis.</div>}<p className="muted">EMA(20/50/100/200), RSI(14), MACD(12/26/9), ATR(14), Bollinger(20,2σ), stochastic(14,3).</p></>)}</>}
+      {active==='Support and Resistance'&&<>{buttons}{panel('Swing pivot zones',<><button className="secondary" onClick={()=>void loadAnalysis()}>Calculate levels</button>{analysis?.levels?<div className="two-col">{(['support','resistance'] as const).map(k=><div key={k}><h4>{k}</h4>{analysis.levels![k].length?analysis.levels![k].map((x,i)=><p key={i}>{fmt(x.price)} <span className="muted">{x.strength} · {x.touches} touches</span></p>):<p className="muted">No levels found.</p>}</div>)}</div>:<div className="empty">No levels computed yet.</div>}<p className="muted">Levels cluster repeated 5-bar swing pivots using ATR-scaled tolerance; a heuristic, not a guarantee.</p></>)}</>}
+      {active==='Trade Calculator'&&<>{panel('Position sizing & reward/risk',<form onSubmit={e=>void calcRisk(e)} className="form-grid">{[['entry','Entry price'],['stop_loss','Stop-loss'],['take_profit','Take-profit'],['account_balance','Account balance'],['risk_percent','Risk % (max 5)'],['contract_size','Contract size / unit multiplier']].map(([key,label])=><label key={key}>{label}<input type="number" step="any" min="0.000001" required value={(risk as any)[key]} onChange={e=>setRisk({...risk,[key]:e.target.value})}/></label>)}<button type="submit">Calculate risk</button>{riskOut&&<div className="result-box"><div className="grid">{Object.entries(riskOut).filter(([k])=>k!=='warning').map(([k,v])=><div className="metric" key={k}><span>{k.replace(/_/g,' ')}</span><strong>{typeof v==='number'?Number(v).toFixed(4):String(v)}</strong></div>)}</div><p>{riskOut.warning}</p></div>}</form>)}</>}
+      {active==='Backtesting'&&<>{panel('Historical strategy test',<><p>Upload a timestamped OHLC CSV with at least 440 bars. EMA 20/50 cross, next close entry, ATR stop/target. Spread and slippage assumptions are deducted. Ambiguous stop/target bar resolves stop-first; open trades excluded.</p><input type="file" accept=".csv,text/csv" onChange={e=>void onFile(e,'backtest')}/>{result?.strategy&&<BacktestResult data={result}/>}</>)}</>}
+      {active==='Signal History'&&<>{panel('Persisted analysis history',<><button className="secondary" onClick={()=>void loadSignals()}>Refresh history</button> <button className="secondary" onClick={()=>void refreshOutcomes()} disabled={busy}>Refresh outcomes from subsequent provider bars</button>{signalList(signals)}{result?.evaluated!==undefined&&<p className="muted">Outcome refresh evaluated {result.evaluated}; unresolved {result.still_unresolved}.</p>}</>)}</>}
+      {active==='Performance Reports'&&<>{panel('Observed signal outcomes',<><button className="secondary" onClick={()=>void loadSignals()}>Refresh statistics</button><div className="grid">{Object.entries(signalPerf?.counts||{}).map(([k,v])=><div className="metric" key={k}><span>{k.replace(/_/g,' ')}</span><strong>{String(v)}</strong></div>)}</div><p>Observed directional win rate: {signalPerf?.win_rate_percent==null?'not yet measurable':`${signalPerf.win_rate_percent}%`}. This describes tracked provider-bar outcomes, not profitable fills.</p><p className="muted">{signalPerf?.caveat||'Signal outcomes are not yet calculated.'}</p><button onClick={()=>void refreshOutcomes()} disabled={busy}>Update outcomes</button></>)}{panel('Historical backtest',result?.strategy?<BacktestResult data={result}/>:<p>Run a backtest with uploaded historical CSV to view measured win rate, profit factor, maximum drawdown, realized trade results, cost assumptions and chronological out-of-sample results. No profitability is inferred from live signals.</p>)}</>}
+      {active==='Settings'&&<>{panel('Data & privacy',<ul><li>Provider: Yahoo chart endpoint (free, unofficial, may be delayed; no uptime or quote guarantee).</li><li>CSV remains local to your request; uploaded market files are processed in memory.</li><li>Signals stored in local SQLite in backend; no external AI service configured.</li><li>Risk defaults must be adapted to broker contract and account currency.</li></ul>)}{panel('Provider details',<ProviderDetails/> )}</>}
+    </main></div>
+}
+function fmt(x:number){return Number.isFinite(x)?x.toFixed(2):'—'}
+function signalList(signals:any[]){return signals.length?<div className="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Timeframe</th><th>Signal</th><th>Observed close</th><th>Outcome</th></tr></thead><tbody>{signals.map(x=><tr key={x.id}><td>{x.created_at?new Date(x.created_at).toLocaleString():'—'}</td><td>{x.instrument}</td><td>{x.timeframe}</td><td><Badge value={x.direction}/></td><td>{x.price==null?'—':fmt(x.price)}</td><td>{x.outcome}</td></tr>)}</tbody></table></div>:<div className="empty">No persisted signals yet. Analysis runs will appear here.</div>}
+function BacktestResult({data}: {data:any}){return <div className="result-box"><h4>{data.strategy} · {data.timeframe}</h4><div className="grid">{[['Total trades',data.total_trades],['Win rate',data.win_rate==null?'—':`${data.win_rate}%`],['Profit factor',data.profit_factor],['Max drawdown / unit',data.max_drawdown_per_unit],['Net / unit',data.net_return_per_unit],['Average R',data.average_r]].map(([k,v])=><div className="metric" key={String(k)}><span>{k}</span><strong>{String(v??'—')}</strong></div>)}</div><p className="muted">Spread {data.cost_model.spread}, slippage {data.cost_model.slippage}; round-trip deduction {data.cost_model.deduction_per_round_trip}. {data.caveat}</p>{data.split&&<><p className="muted">Chronological split: {data.split.timestamp} · {data.split.method}</p><div className="two-col"><div><h4>In-sample · win {data.in_sample?.win_rate??'—'}%</h4><p>Trades {data.in_sample?.total_trades??0} · PF {data.in_sample?.profit_factor??'—'} · MDD {data.in_sample?.max_drawdown_per_unit??'—'}</p></div><div><h4>Out-of-sample · win {data.out_of_sample?.win_rate??'—'}%</h4><p>Trades {data.out_of_sample?.total_trades??0} · PF {data.out_of_sample?.profit_factor??'—'} · MDD {data.out_of_sample?.max_drawdown_per_unit??'—'}</p></div></div></>}</div>}
+function ProviderDetails(){const [data,setData]=useState<any>(null);useEffect(()=>{request('/api/providers').then(setData).catch(()=>{})},[]);return data?<pre>{JSON.stringify(data.providers[0],null,2)}</pre>:<p>Provider metadata unavailable.</p>}
+export default App

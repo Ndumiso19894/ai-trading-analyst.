@@ -1,26 +1,36 @@
-# Testing
+# Verification and testing
 
-## Backend
+## Executed in this workspace
+
+- Backend: `cd backend && python3 -m pytest -q` — latest suite includes indicator bounds,
+  OHLC validation/resampling, deterministic analysis, backtest metrics, CSV API upload,
+  screenshot decode/WAIT behavior, risk math and configured ticker restriction.
+- Frontend: `cd frontend && npm run build` — TypeScript typecheck + Vite production build.
+- Provider smoke test: called Yahoo chart endpoint for XAUUSD=X; **failed** because sandbox
+  outbound network closed TLS to provider. No live data was retrieved; endpoint use is not
+  verified in this environment.
+- Android: build attempt not available. `java`, `gradle`, `kotlinc`, `ANDROID_HOME`, and
+  `ANDROID_SDK_ROOT` are absent. No APK was generated.
+
+Always rerun commands against the current source before reporting a result.
+
+## Backend commands
 
 ```bash
 cd backend
 pip install -r requirements.txt
-pytest -q
+python -m pytest -q
 ```
 
-- `tests/test_health.py` — `/health` and `/` return 200 with expected payloads.
-- Indicator tests (Phase 3) will verify EMA/RSI/MACD/ATR against hand-computed values.
-- Backtest tests (Phase 6) will use fixed synthetic series with known outcomes.
-
-## Frontend
+## Frontend commands
 
 ```bash
 cd frontend
-npm install
-npm run build   # tsc + vite build must pass
+npm ci
+npm run build
 ```
 
-## Rules
+## Android (requires separate toolchain)
 
-- Never report a test as passing unless it was executed.
-- Every engine ships with tests before its phase is marked complete.
+Install JDK 17, Android SDK 35 and Gradle 8.9+, set `ANDROID_HOME`, then from `android/`
+run `gradle assembleDebug`. Build/device tests remain outstanding.

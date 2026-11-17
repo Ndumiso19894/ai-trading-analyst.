@@ -1,51 +1,48 @@
-# Development Roadmap — AI Trading Analyst
+# Development roadmap and status
 
-Phased plan. Each phase ends with tests + commit + push. No phase is "done" until
-verified against the acceptance criteria.
+Updated 2026-11-17. Status reflects code implemented and tests actually run; **implemented
+is not equivalent to validated on a real broker/feed**.
 
-## Phase 1 — Project foundation ✅ (foundation delivered; private repository setup pending)
-- [x] Inspect environment (Python 3.11, Node 22, GitHub connected)
-- [x] Create project structure (backend / frontend / android / documentation / datasets / scripts)
-- [x] FastAPI backend skeleton with `/health` + CORS + env config
-- [x] React + TS frontend skeleton with 14-section nav + backend status check
-- [x] `.gitignore`, `.env.example`, docs (README, ARCHITECTURE, CHANGELOG, TESTING)
-- [x] Verify backend tests pass (2/2); verify frontend production build
-- [x] Commit + push foundation to the current Arena branch
-- [ ] Rename existing GitHub repository from `ai-trading-analyst.` to `ai-trading-analyst` and make it private (blocked by GitHub integration permissions; owner action required)
+## Web/backend groundwork — substantially implemented
+- [x] FastAPI app, environment configuration, CORS, React/TS dashboard, API proxy
+- [x] Free Yahoo chart source integration for XAUUSD=X; source/timestamp and delayed-data
+  caveats; bounded 60-second process cache; CSV offline fallback
+- [x] CSV OHLC validation, duplicate removal, ordering, timeframe support, file limits
+- [x] Candlestick chart via Lightweight Charts
+- [x] EMA 20/50/100/200, RSI, MACD, ATR, Bollinger, stochastic calculations
+- [x] Swing pivot structure + support/resistance clusters
+- [x] Deterministic BUY/SELL/WAIT engine and explanation; ATR-based 1R/2R targets
+- [x] Multi-timeframe comparison; conflicts/no-confirmation do not present a bullish/bearish
+  consensus
+- [x] Risk calculator with configurable contract multiplier and <=5% risk input cap
+- [x] CSV backtest; next-bar-open, ATR exits, costs, conservative stop-first bar collision,
+  chronological 70/30 split and metrics
+- [x] SQLite signal history, outcome refresh endpoint, outcome counts
+- [x] Responsive web pages for all requested sections, with features represented honestly
+- [x] Screenshot upload input and tested local image validation/color sampling **only**
 
-## Phase 2 — Market data
-- Research free XAU/USD sources (rate limits, licensing, history depth, delay vs real-time)
-- Implement provider(s) + CSV upload, OHLC validation, caching, dedupe, failure handling
-- Display source + timestamp; never fabricate prices
+## Partial / limited
+- Screenshot interpretation is NOT full chart-reading: no OCR, vision model, structure
+  extraction or trade call. It responds WAIT with uncertainty and crude color counts.
+- Yahoo source is unofficial, possibly delayed, rate-limited, may change and has no SLA;
+  sandbox egress currently blocks its host. Live-source operation was not verified here.
+- Provider cache is in-process memory only (lost on restart); signals use local SQLite.
+- Price action only covers basic swing highs/lows; named candle patterns, robust BOS/CHoCH,
+  supply/demand zones and false-breakout confirmation remain future work.
+- Outcome refresh is best-effort based on provider 1h OHLC, TP1/SL only, no broker fills,
+  fees or quote-quality controls. Expiry is a fixed 120-bar heuristic; TP2 is not included in outcome accounting.
+- No production deployment hardening, authentication, cloud synchronization or push alerts.
+- Frontend build was verified; browser-driven end-to-end test suite is not present.
 
-## Phase 3 — Technical analysis
-- Indicators: EMA 20/50/100/200, RSI 14, MACD, Stochastic, ATR 14, Bollinger Bands
-- Price action: structure (HH/HL/LH/LL), BOS/CHoCH, breakouts, pullbacks, rejections
-- Support/resistance + supply/demand zones with strength scoring
-- Unit tests against known values
+## Android — source scaffold only
+- [x] Kotlin / Jetpack Compose source, health-data/analysis/history actions, screenshot picker
+- [ ] JDK/Android SDK/Gradle unavailable in this environment: compilation and APK generation
+  not performed. Native UI and network behavior therefore remain unverified.
 
-## Phase 4 — Signal engine
-- BUY/SELL/WAIT with entry, SL, TP1, TP2, R:R, invalidation, supporting/conflicting evidence
-- Multi-timeframe agreement/conflict logic; deterministic explanation engine
-- Signal history persistence (SQLite)
-
-## Phase 5 — Screenshot analysis
-- Upload (PNG/JPEG), OpenCV preprocessing, candle/structure extraction
-- Direction, patterns, S/R, breakouts/reversals; BUY/SELL/WAIT + missing-info report
-- Safeguards: no invented prices/readings/timeframes
-
-## Phase 6 — Backtesting
-- Historical strategy testing with spread/slippage/costs, no look-ahead bias
-- Metrics: win rate, profit factor, max drawdown, expectancy, per-timeframe breakdown
-- Out-of-sample support; performance charts
-
-## Phase 7 — Complete web application
-- Integrate all 14 sections; risk calculator (1:1, 1:1.5, 1:2, 1:3); notifications (local)
-- End-to-end test; install/usage docs; stable release tag
-
-## Phase 8 — Android application
-- Kotlin + Jetpack Compose; reuse backend API
-- Chart viewing, screenshot upload, signals, history; build APK
-
-## Future (after Gold is reliable)
-EUR/USD, GBP/USD, USD/JPY, AUD/USD, other instruments with free data.
+## Not started / outstanding
+- True local vision model integration, OCR, chart-pattern/screenshot inference tests
+- Robust supply/demand, candle patterns, false breakout/BOS/CHoCH classifier
+- Persistent candle cache, complete outcome lifecycle and costs/contract-aware performance
+- Automated frontend tests, full browser E2E; Android compile/device tests and APK
+- Notifications, authentication/security review, data licenses review
+- Gold-market analysis validation across independent feeds and known historical cases
