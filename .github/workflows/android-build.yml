@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,14 +41,24 @@ jobs:
           command -v sdkmanager || true
       - name: Install Android API 35 build tools
         run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Set up Gradle 8.9 (open-source cache)
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-          cache-provider: basic
       - name: Run Android unit-test task and build APKs
+        id: gradle-build
         working-directory: android
-        run: gradle --no-daemon testDebugUnitTest assembleDebug assembleRelease
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --stacktrace testDebugUnitTest assembleDebug assembleRelease > "$RUNNER_TEMP/android-gradle.log" 2>&1
+          result=$?
+          tail -n 100 "$RUNNER_TEMP/android-gradle.log"
+          if [[ $result -ne 0 ]]; then
+            details=$(grep -E '(^e: |error:|What went wrong:|Execution failed|Could not |Failed to |^> |^\* Exception is:)' "$RUNNER_TEMP/android-gradle.log" | tail -n 35 | tr '\n' ' ' | cut -c1-5000)
+            echo "::error title=Android Gradle failure::$details"
+          fi
+          exit $result
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
