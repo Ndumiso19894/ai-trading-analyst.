@@ -3,14 +3,15 @@
 Phased plan. Each phase ends with tests + commit + push. No phase is "done" until
 verified against the acceptance criteria.
 
-## Phase 1 — Project foundation ✅ (in progress)
+## Phase 1 — Project foundation ✅ (foundation delivered; private repository setup pending)
 - [x] Inspect environment (Python 3.11, Node 22, GitHub connected)
 - [x] Create project structure (backend / frontend / android / documentation / datasets / scripts)
 - [x] FastAPI backend skeleton with `/health` + CORS + env config
 - [x] React + TS frontend skeleton with 14-section nav + backend status check
 - [x] `.gitignore`, `.env.example`, docs (README, ARCHITECTURE, CHANGELOG, TESTING)
-- [ ] Verify backend tests pass; verify frontend builds
-- [ ] Commit + push foundation
+- [x] Verify backend tests pass (2/2); verify frontend production build
+- [x] Commit + push foundation to the current Arena branch
+- [ ] Rename existing GitHub repository from `ai-trading-analyst.` to `ai-trading-analyst` and make it private (blocked by GitHub integration permissions; owner action required)
 
 ## Phase 2 — Market data
 - Research free XAU/USD sources (rate limits, licensing, history depth, delay vs real-time)
