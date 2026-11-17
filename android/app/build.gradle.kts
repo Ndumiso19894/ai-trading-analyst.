@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val configuredBackendUrl = providers.gradleProperty("backendBaseUrl")
+    .orElse("https://goldlens-xau-api-ndumiso19894.onrender.com")
+    .get()
+
 android {
     namespace = "com.goldlens.analyst"
     compileSdk = 35
@@ -11,15 +15,19 @@ android {
         applicationId = "com.goldlens.analyst"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.3.0"
+        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"$configuredBackendUrl\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     signingConfigs {
         val releaseStore = System.getenv("ANDROID_KEYSTORE_FILE")
         if (!releaseStore.isNullOrBlank()) {

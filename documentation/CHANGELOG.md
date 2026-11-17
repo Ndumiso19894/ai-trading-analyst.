@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0] — phone-first backend preparation (2026-11-17)
+- Added a Render Free Blueprint for a stable HTTPS FastAPI service URL, health check, Virginia
+  region and CORS configuration. It is not deployed: owner Render/GitHub authorization is needed.
+- Android now checks health on launch, defaults to the Blueprint host, and stores an advanced
+  endpoint override. Release networking requires HTTPS; HTTP remains debug-only.
+- Added Render free-tier/sleep/ephemeral-history caveats and phone deployment steps.
+- Android CI build with the new URL is pending; no public API deployment has been verified.
+
 ## [0.2.0] — analysis and application milestone (2026-11-17)
 - Added Yahoo chart data adapter with source caveats and bounded memory cache; CSV import and
   OHLCV validation remain an offline market-data option.

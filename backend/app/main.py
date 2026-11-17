@@ -16,7 +16,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -33,5 +33,5 @@ def root() -> dict:
         "message": "AI Trading Analyst API",
         "docs": "/docs",
         "health": "/health",
-        "status": "Phase 1 foundation — market data & analysis engines in development",
+        "status": "Analysis API ready; market provider availability depends on upstream network access.",
     }

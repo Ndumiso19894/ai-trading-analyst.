@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from app.main import app
 import signals.storage as signal_storage
+import app.api.routes as api_routes
 import pytest
 
 client=TestClient(app)
@@ -16,6 +17,23 @@ def csv_bytes(n=320):
     x=range(n); close=[1900+i*.2 for i in x]
     frame=pd.DataFrame({"timestamp":pd.date_range("2024-01-01",periods=n,freq="h",tz="UTC").astype(str),"open":[v-.1 for v in close],"high":[v+1 for v in close],"low":[v-1 for v in close],"close":close,"volume":[100]*n})
     return frame.to_csv(index=False).encode()
+
+def test_market_candles_endpoint_returns_provenance(monkeypatch,candles):
+    async def fake_get_cached(symbol,timeframe,period):
+        return candles,{"source":"Fixture provider","fetched_at":"2024-01-01T00:00:00+00:00","delayed":True,"requested_period":period,"effective_period":period,"history_note":None},True
+    monkeypatch.setattr(api_routes,"get_cached",fake_get_cached)
+    r=client.get("/api/market/candles?timeframe=1h&period=5d")
+    assert r.status_code==200 and r.json()["source"]=="Fixture provider"
+    assert r.json()["candles"][-1]["close"]==float(candles.close.iloc[-1])
+
+def test_live_analysis_uses_higher_frames_and_records_signal(monkeypatch,candles):
+    async def fake_get_cached(symbol,timeframe,period):
+        return candles,{"source":"Fixture provider","fetched_at":"2024-01-01T00:00:00+00:00","delayed":True,"requested_period":period,"effective_period":period,"history_note":None},True
+    monkeypatch.setattr(api_routes,"get_cached",fake_get_cached)
+    r=client.get("/api/analysis?timeframe=1h&period=5d")
+    assert r.status_code==200 and r.json()["source"]=="Fixture provider"
+    assert set(r.json()["higher_timeframes"])=={"4h","1d"}
+    assert r.json()["signal_id"]>0
 
 def test_csv_analysis_upload_and_history():
     r=client.post("/api/analysis/csv?timeframe=1h",files={"file":("history.csv",csv_bytes(),"text/csv")})
@@ -42,6 +60,16 @@ def test_risk_calculation():
     assert r.status_code==200 and r.json()["risk_reward"]==2
     assert r.json()["potential_loss"]==100
 
+def test_data_api_restricts_unconfigured_ticker():
+    r=client.get("/api/market/candles?symbol=EURUSD=X")
+    assert r.status_code==400
+
+def test_cors_is_compatible_with_mobile_and_not_cookie_credentialed():
+    response=client.options("/api/providers",headers={"Origin":"https://goldlens-xau-api-ndumiso19894.onrender.com","Access-Control-Request-Method":"GET"})
+    assert response.status_code==200
+    assert response.headers.get("access-control-allow-origin")=="*"
+    assert response.headers.get("access-control-allow-credentials") is None
+
 def test_backtest_requires_and_reports_chronological_split():
     r=client.post("/api/backtest?timeframe=1h",files={"file":("history.csv",csv_bytes(500),"text/csv")})
     assert r.status_code==200, r.text
@@ -49,7 +77,3 @@ def test_backtest_requires_and_reports_chronological_split():
     assert body["split"]["method"].startswith("chronological 70/30")
     assert body["out_of_sample"]["evaluation_start_index"]==350
     assert "max_consecutive_wins" in body
-
-def test_data_api_restricts_unconfigured_ticker():
-    r=client.get("/api/market/candles?symbol=EURUSD=X")
-    assert r.status_code==400

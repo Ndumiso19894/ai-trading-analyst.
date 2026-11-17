@@ -2,6 +2,12 @@
 
 ## Executed in this workspace
 
+- Latest backend suite after CORS and endpoint changes: `python3 -m pytest -q` — 21 passed,
+  one Starlette deprecation warning. Includes mocked market provenance and higher-timeframe
+  analysis, CSV, history, risk, screenshot abstention, CORS and backtest endpoints.
+- Render deployment: **not deployed or tested**; Render/GitHub account authorization is still
+  required. Do not treat the Blueprint's predicted hostname as live.
+
 - Backend: `cd backend && python3 -m pytest -q` — latest suite includes indicator bounds,
   OHLC validation/resampling, deterministic analysis, backtest metrics, CSV API upload,
   screenshot decode/WAIT behavior, risk math and configured ticker restriction.

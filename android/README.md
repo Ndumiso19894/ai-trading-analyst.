@@ -1,9 +1,11 @@
 # Android client
 
-Native Kotlin + Jetpack Compose source consuming the FastAPI service. Current UI supports
-backend URL configuration, analysis request, candles, signal history, screenshot selection
-and upload. Emulator backend default: `http://10.0.2.2:8000`; for a physical phone, enter
-an address reachable on your Wi-Fi. Cleartext HTTP is development-only.
+Native Kotlin + Jetpack Compose source consuming the FastAPI service. The app checks `/health`
+on first launch and defaults to the planned HTTPS Render host
+`https://goldlens-xau-api-ndumiso19894.onrender.com`. That address is only a target until the
+owner creates/deploys the Render service; deployment status and phone steps are in
+`documentation/DEPLOYMENT.md`. Backend URL override is under Advanced connection settings and
+is saved on-device. Release builds require HTTPS; debug builds allow HTTP for local testing.
 
 ## Local build
 
@@ -59,7 +61,9 @@ uploads APKs as the `goldlens-android-apks` artifact for 30 days.
 
 The verified run is [Android build #44065622695](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44065622695)
 on commit `aca26e63`. Open the run in GitHub Actions → **Artifacts** →
-`goldlens-android-apks`; download and unzip it on a phone or computer. CI verified both
+`goldlens-android-apks`; download and unzip it on a phone or computer. The CI debug signing
+key is ephemeral, so uninstall an older CI-built debug APK before installing a new one (or
+use the owner-signed release build to preserve upgrade signing). CI verified both
 `app-debug.apk` (signed with the standard debug key, installable for testing) and
 `app-release-unsigned.apk`. The release APK is not installable until signed; configure the
 four owner secrets above and rerun the workflow for a signed release. The sandbox could not

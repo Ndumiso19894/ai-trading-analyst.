@@ -72,9 +72,10 @@ gradle assembleDebug
 # Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Emulator backend URL defaults to `http://10.0.2.2:8000`. For a physical device, set
-Backend URL to an address reachable on the local network. Cleartext HTTP is enabled for
-local development only; use HTTPS before any public deployment.
+The app defaults to the Render Blueprint HTTPS host and checks `/health` on launch. That
+hostname will not respond until the owner deploys the Blueprint. In the app, **Advanced
+connection settings** permits a different HTTPS URL and saves it on-device. HTTP is allowed
+only in debug builds for local development.
 
 ## CSV format
 
@@ -91,6 +92,14 @@ limits, retention, terms and ticker availability can change; review the provider
 terms before redistribution or commercial use. No API key is required. Never assume this
 is an executable broker price. If access is unavailable, use downloaded broker/provider
 CSV you are authorized to use; the analyzer works offline with CSV.
+
+## Phone-first backend deployment
+
+A free Render Blueprint is in `render.yaml`. Render account/GitHub authorization is required
+before a live service exists; see `documentation/DEPLOYMENT.md` for the phone workflow, free
+sleep/storage limits, and verification checklist. The Android app is preconfigured for the
+Blueprint's expected HTTPS host and retains an advanced, persistent endpoint override. That
+host is a target, not a verified public API until the owner completes the Render deployment.
 
 ## Documentation
 
