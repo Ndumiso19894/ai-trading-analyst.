@@ -35,7 +35,7 @@ object MultiTimeframeAnalyzer {
                 status = when {
                     candles.isEmpty() -> "unavailable: source data cannot produce complete $target bars"
                     analysis?.direction == Direction.WAIT -> analysis.reason
-                    else -> "available",
+                    else -> "available"
                 },
             )
         }
