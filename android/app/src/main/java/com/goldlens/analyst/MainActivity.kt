@@ -41,6 +41,7 @@ import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.Direction
 import com.goldlens.analyst.core.IndicatorValues
 import com.goldlens.analyst.core.MarketDataset
+import com.goldlens.analyst.core.InstrumentRegistry
 import com.goldlens.analyst.core.PriceZone
 import com.goldlens.analyst.core.RiskInput
 import com.goldlens.analyst.core.RiskResult
@@ -100,6 +101,7 @@ private fun GoldLensScreen(context: Context) {
     var risk by remember { mutableStateOf<RiskResult?>(null) }
     var tab by remember { mutableIntStateOf(0) }
     var timeframe by remember { mutableStateOf("1h") }
+    var instrument by remember { mutableStateOf("XAU/USD") }
     var isBusy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var riskBalance by remember { mutableStateOf("") }
@@ -107,7 +109,7 @@ private fun GoldLensScreen(context: Context) {
     var riskEntry by remember { mutableStateOf("") }
     var riskStop by remember { mutableStateOf("") }
     var riskTarget by remember { mutableStateOf("") }
-    var riskContract by remember { mutableStateOf("1.0") }
+    var riskContract by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     fun request(path: String, imageUri: Uri? = null) {
@@ -143,9 +145,9 @@ private fun GoldLensScreen(context: Context) {
                         ?: throw IllegalArgumentException("Could not read the selected CSV file.")
                 }
                 val parsed = withContext(Dispatchers.Default) { CsvCandleParser.parse(content) }
-                withContext(Dispatchers.IO) { database.replaceCandleSet(timeframe, parsed.candles) }
+                withContext(Dispatchers.IO) { database.replaceCandleSet(timeframe, parsed.candles, instrument) }
                 val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "Imported OHLC CSV" } ?: "Imported OHLC CSV"
-                dataset = MarketDataset(parsed.candles, DataSourceKind.IMPORTED_CSV, fileName, timeframe, System.currentTimeMillis())
+                dataset = MarketDataset(parsed.candles, DataSourceKind.IMPORTED_CSV, fileName, timeframe, System.currentTimeMillis(), instrument)
                 analysis = null
                 risk = null
                 error = if (parsed.skippedRows > 0) "Loaded ${parsed.candles.size} valid candles; skipped ${parsed.skippedRows} invalid/duplicate rows." else "Loaded ${parsed.candles.size} valid candles."
@@ -158,6 +160,19 @@ private fun GoldLensScreen(context: Context) {
     val screenshotPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) request("/api/screenshot/analyze", uri)
     }
+    val csvExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val candlesToExport = dataset?.candles.orEmpty()
+        if (uri != null && candlesToExport.isNotEmpty()) scope.launch {
+            try {
+                val csv = withContext(Dispatchers.Default) { CsvCandleParser.export(candlesToExport) }
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(csv) }
+                        ?: throw IllegalArgumentException("Could not write the selected CSV destination.")
+                }
+                error = "Exported ${candlesToExport.size} candles for $instrument."
+            } catch (e: Exception) { error = e.message ?: "CSV export failed." }
+        }
+    }
 
     fun analyzeOffline() {
         val loaded = dataset ?: run { error = "Import an authorized OHLC CSV before analyzing."; return }
@@ -165,7 +180,7 @@ private fun GoldLensScreen(context: Context) {
             isBusy = true
             error = ""
             try {
-                val selected = loaded.copy(timeframe = timeframe)
+                val selected = loaded.copy(timeframe = timeframe, instrument = instrument)
                 val result = withContext(Dispatchers.Default) { AnalysisEngine.analyze(selected) }
                 withContext(Dispatchers.IO) { database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() }) }
                 dataset = selected
@@ -190,6 +205,7 @@ private fun GoldLensScreen(context: Context) {
     }
 
     fun startOverlayService() {
+        prefs.edit().putString("analysis_symbol", instrument).putString("timeframe", timeframe).apply()
         ContextCompat.startForegroundService(context, Intent(context, FloatingAssistantService::class.java))
         overlayRunning = true
         prefs.edit().putBoolean("overlay_running", true).apply()
@@ -222,11 +238,16 @@ private fun GoldLensScreen(context: Context) {
 
     LaunchedEffect(database) {
         try {
-            val savedTimeframe = withContext(Dispatchers.IO) { database.settingDao().get("timeframe") ?: "1h" }
+            val settings = withContext(Dispatchers.IO) {
+                (database.settingDao().get("timeframe") ?: "1h") to (database.settingDao().get("instrument") ?: "XAU/USD")
+            }
+            val savedTimeframe = settings.first
+            val savedInstrument = InstrumentRegistry.find(settings.second)?.symbol ?: "XAU/USD"
             timeframe = savedTimeframe
-            val rows = withContext(Dispatchers.IO) { database.candleDao().latest("XAU/USD", savedTimeframe, 5_000).asReversed() }
+            instrument = savedInstrument
+            val rows = withContext(Dispatchers.IO) { database.candleDao().latest(savedInstrument, savedTimeframe, 5_000).asReversed() }
             if (rows.isNotEmpty()) {
-                val restored = MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", savedTimeframe, System.currentTimeMillis())
+                val restored = MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", savedTimeframe, System.currentTimeMillis(), savedInstrument)
                 dataset = restored
                 analysis = withContext(Dispatchers.Default) { AnalysisEngine.analyze(restored) }
             }
@@ -236,7 +257,16 @@ private fun GoldLensScreen(context: Context) {
         if (backendUrl.isNotBlank()) request("/health")
     }
     LaunchedEffect(timeframe, settingsLoaded) {
-        if (settingsLoaded) withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("timeframe", timeframe)) }
+        if (settingsLoaded) {
+            prefs.edit().putString("timeframe", timeframe).apply()
+            withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("timeframe", timeframe)) }
+        }
+    }
+    LaunchedEffect(instrument, settingsLoaded) {
+        if (settingsLoaded) {
+            prefs.edit().putString("analysis_symbol", instrument).apply()
+            withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("instrument", instrument)) }
+        }
     }
     val tabs = listOf("Overview", "Analysis", "S/R Zones", "Risk", "Journal", "Settings")
 
@@ -249,7 +279,7 @@ private fun GoldLensScreen(context: Context) {
             Column(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
                     Text("GOLDLENS", color = Gold, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Text("XAU/USD · Offline-first analysis", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text("$instrument · Offline-first analysis", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     Text(dataset?.let { "${it.sourceLabel} · ${it.timeframe} · ${it.candles.size} candles" } ?: "No market feed configured · no sample prices", color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
                 ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp, containerColor = Screen, contentColor = Gold) {
@@ -259,13 +289,34 @@ private fun GoldLensScreen(context: Context) {
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (error.isNotBlank()) InfoCard(error, if (error.startsWith("Loaded")) Green else Red)
+                    if (error.isNotBlank()) InfoCard(error, if (error.startsWith("Loaded") || error.startsWith("Exported")) Green else Red)
                     when (tab) {
-                        0 -> OverviewTab(dataset, analysis, timeframe, isBusy, onImport = { csvPicker.launch(arrayOf("text/*", "text/csv", "application/vnd.ms-excel")) }, onTimeframe = { timeframe = it }, onAnalyze = ::analyzeOffline, onRisk = { tab = 3 })
+                        0 -> OverviewTab(dataset, analysis, timeframe, instrument, isBusy,
+                            onImport = { csvPicker.launch(arrayOf("text/*", "text/csv", "application/vnd.ms-excel")) },
+                            onTimeframe = { nextTimeframe ->
+                                timeframe = nextTimeframe
+                                dataset = null
+                                analysis = null
+                                scope.launch {
+                                    val rows = withContext(Dispatchers.IO) { database.candleDao().latest(instrument, nextTimeframe, 5_000).asReversed() }
+                                    dataset = if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", nextTimeframe, System.currentTimeMillis(), instrument)
+                                }
+                            },
+                            onInstrument = { next ->
+                                instrument = next
+                                dataset = null
+                                analysis = null
+                                scope.launch {
+                                    val rows = withContext(Dispatchers.IO) { database.candleDao().latest(next, timeframe, 5_000).asReversed() }
+                                    dataset = if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", timeframe, System.currentTimeMillis(), next)
+                                }
+                            },
+                            onExport = { csvExportPicker.launch("goldlens-${instrument.replace('/', '-')}-${timeframe}.csv") },
+                            onAnalyze = ::analyzeOffline, onRisk = { tab = 3 })
                         1 -> AnalysisTab(analysis, dataset, isBusy, ::analyzeOffline)
                         2 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price)
                         3 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk)
-                        4 -> JournalTab(database, timeframe)
+                        4 -> JournalTab(database, timeframe, instrument)
                         else -> SettingsTab(backendUrl, { backendUrl = it; prefs.edit().putString("backend_url", it).apply(); scope.launch(Dispatchers.IO) { database.settingDao().put(SettingEntity("backend_url", it)) } }, backendState, backendResponse, isBusy, overlayAllowed, overlayRunning, ::enableOverlay, ::disableOverlay, { request("/health") }, { request("/api/market/candles?timeframe=$timeframe&period=5d") }, { request("/api/analysis?timeframe=$timeframe&period=3mo") }, { request("/api/signals") }, { screenshotPicker.launch("image/*") })
                     }
                 }
@@ -276,14 +327,17 @@ private fun GoldLensScreen(context: Context) {
 
 @Composable
 private fun OverviewTab(
-    dataset: MarketDataset?, analysis: AnalysisResult?, timeframe: String, busy: Boolean,
-    onImport: () -> Unit, onTimeframe: (String) -> Unit, onAnalyze: () -> Unit, onRisk: () -> Unit,
+    dataset: MarketDataset?, analysis: AnalysisResult?, timeframe: String, instrument: String, busy: Boolean,
+    onImport: () -> Unit, onTimeframe: (String) -> Unit, onInstrument: (String) -> Unit,
+    onExport: () -> Unit, onAnalyze: () -> Unit, onRisk: () -> Unit,
 ) {
+    InstrumentPicker(instrument, onInstrument)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onImport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Import OHLC CSV") }
         OutlinedButton(onClick = onAnalyze, enabled = dataset != null && !busy, modifier = Modifier.weight(1f)) { Text("Analyze locally") }
     }
     TimeframePicker(timeframe, onTimeframe)
+    if (dataset != null) OutlinedButton(onClick = onExport, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Export ${dataset.candles.size} candles as CSV") }
     if (dataset == null) {
         InfoCard("Import a CSV containing timestamp, open, high, low and close. GoldLens will calculate locally. No invented market values are displayed.", Gold)
         Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
@@ -339,7 +393,7 @@ private fun SignalSummary(result: AnalysisResult) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("${result.timeframe} · ${result.dataSource.name}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("${result.instrument} · ${result.timeframe} · ${result.dataSource.name}", color = Muted, style = MaterialTheme.typography.bodySmall)
             }
             result.price?.let { Text("Last candle close: ${price(it)}", style = MaterialTheme.typography.titleMedium) }
             Text(result.reason, color = Muted)
@@ -382,7 +436,7 @@ private fun RiskTab(
     target: String, onTarget: (String) -> Unit, contract: String, onContract: (String) -> Unit,
     result: RiskResult?, onCalculate: () -> Unit,
 ) {
-    InfoCard("Manual calculator works offline. Contract size is broker-specific; the default 1.0 is only a unit multiplier, not a universal XAU/USD lot specification.", Gold)
+    InfoCard("Manual calculator works offline. Enter the contract-size multiplier verified for your broker and instrument. GoldLens does not assume a universal lot size or perform account-currency conversion.", Gold)
     NumericField("Account balance", balance, onBalance)
     NumericField("Risk percent (max 5%)", percent, onPercent)
     NumericField("Entry", entry, onEntry)
@@ -399,7 +453,7 @@ private fun RiskTab(
 }
 
 @Composable
-private fun JournalTab(database: GoldLensDatabase, timeframe: String) {
+private fun JournalTab(database: GoldLensDatabase, timeframe: String, instrument: String) {
     val scope = rememberCoroutineScope()
     var entries by remember { mutableStateOf(emptyList<JournalEntity>()) }
     var direction by remember { mutableStateOf("BUY") }
@@ -430,7 +484,7 @@ private fun JournalTab(database: GoldLensDatabase, timeframe: String) {
                 require(targetValue == null || targetValue > 0) { "Take profit must be positive." }
                 withContext(Dispatchers.IO) {
                     database.journalDao().insert(JournalEntity(
-                        openedAtMillis = System.currentTimeMillis(), direction = direction,
+                        openedAtMillis = System.currentTimeMillis(), symbol = instrument, direction = direction,
                         timeframe = timeframe, entry = entryValue, stopLoss = stopValue,
                         takeProfit = targetValue, notes = notes.trim(),
                     ))
@@ -447,7 +501,7 @@ private fun JournalTab(database: GoldLensDatabase, timeframe: String) {
     entries.forEach { item ->
         Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("${item.direction} · ${item.timeframe} · ${price(item.entry)}", color = if (item.direction == "BUY") Green else Red, fontWeight = FontWeight.Bold)
+                Text("${item.symbol} · ${item.direction} · ${item.timeframe} · ${price(item.entry)}", color = if (item.direction == "BUY") Green else Red, fontWeight = FontWeight.Bold)
                 Text("Stop ${item.stopLoss?.let(::price) ?: "—"} · Target ${item.takeProfit?.let(::price) ?: "—"}", color = Muted, style = MaterialTheme.typography.bodySmall)
                 if (item.notes.isNotBlank()) Text(item.notes)
                 val closeDescription = if (item.closedAtMillis == null) "OPEN" else "Closed at ${item.exitPrice?.let(::price) ?: "—"}"
@@ -492,6 +546,28 @@ private fun SettingsTab(
     }
     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (response.isNotBlank()) Text(response, color = Muted, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun InstrumentPicker(selected: String, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val instrument = InstrumentRegistry.find(selected)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Instrument: ${instrument?.symbol ?: selected} · ${instrument?.displayName ?: "Custom"}  ▾")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                InstrumentRegistry.instruments.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text("${item.symbol} · ${item.displayName}") },
+                        onClick = { onSelect(item.symbol); expanded = false },
+                    )
+                }
+            }
+        }
+        Text("Broker alias is a starter symbol only. Tick value, contract size and minimum volume are unset until verified with your broker.", color = Muted, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable

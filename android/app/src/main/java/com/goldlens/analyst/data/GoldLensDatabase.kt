@@ -218,20 +218,20 @@ suspend fun GoldLensDatabase.saveAnalysis(result: AnalysisEntity, zones: List<Zo
     analysisDao().insertZones(zones.map { it.copy(analysisId = id) })
 }
 
-suspend fun GoldLensDatabase.replaceCandleSet(timeframe: String, candles: List<Candle>) = withTransaction {
-    candleDao().delete("XAU/USD", timeframe)
-    candleDao().upsertAll(candles.map { it.toEntity(timeframe) })
+suspend fun GoldLensDatabase.replaceCandleSet(timeframe: String, candles: List<Candle>, symbol: String = "XAU/USD") = withTransaction {
+    candleDao().delete(symbol, timeframe)
+    candleDao().upsertAll(candles.map { it.toEntity(timeframe, symbol) })
 }
 
 fun CandleEntity.toCandle() = Candle(timestampMillis, open, high, low, close, volume)
 
-private fun Candle.toEntity(timeframe: String) = CandleEntity(
-    timeframe = timeframe, timestampMillis = timestampMillis,
+private fun Candle.toEntity(timeframe: String, symbol: String = "XAU/USD") = CandleEntity(
+    symbol = symbol, timeframe = timeframe, timestampMillis = timestampMillis,
     open = open, high = high, low = low, close = close, volume = volume,
 )
 
 fun AnalysisResult.toEntity() = AnalysisEntity(
-    timestampMillis = timestampMillis ?: System.currentTimeMillis(), timeframe = timeframe,
+    timestampMillis = timestampMillis ?: System.currentTimeMillis(), symbol = instrument, timeframe = timeframe,
     source = dataSource.name, direction = direction.name, score = score, price = price,
     entry = entry, stopLoss = stopLoss, takeProfit = takeProfit, rewardRisk = rewardRisk,
     reason = reason, evidence = evidence.joinToString("\n"), conflicts = conflicts.joinToString("\n"),

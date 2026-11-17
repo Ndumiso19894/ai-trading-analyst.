@@ -1,74 +1,27 @@
-# Enzonic Deploy (Free)
+# Optional backend and offline Android operation
 
-## Current status
+GoldLens does not require a permanently hosted backend. The Android app's imported-candle analysis, local database, risk calculator and CSV workflow are designed to operate offline. Do not configure a production server URL unless the endpoint is real, owned/authorized and verified by its operator. No always-on host is selected for this project.
 
-The owner reports that Enzonic gave the project URL `https://ai-trading-analyst.enzonic.dev/`.
-A public check currently returns Enzonic's `404 · DEPLOYMENT_NOT_FOUND` page at `/`, `/health`,
-`/api/providers` and `/docs`; no app deployment is mapped to that address yet. This is an
-Enzonic Deploy project URL, not a Render URL and not the separate Python Hosting server panel.
-Render is no longer the selected provider, and `render.yaml` has been removed.
+## Existing optional FastAPI service
 
-The build log supplied by the owner says dependencies installed, then FastAPI detection failed
-because the app object was nested at `backend/app/main.py`, while the project root was `backend`.
-The repository now has `backend/main.py`, a top-level shim that imports and exports the existing
-`app` instance. It does not move or duplicate the application. A unit test asserts that the
-shim and original module expose the same FastAPI object.
+For local development:
 
-## Enzonic Deploy project settings
+```bash
+cd backend
+pip install -r requirements.txt
+python run.py
+```
 
-Use the Free plan only; Enzonic's official [Deploy page](https://enzonic.com/cloud/deploy)
-advertises its free tier as $0/no-card. Do not choose a paid plan or upgrade. Official free
-limits include 150 GB monthly bandwidth, 2 million function invocations, and 400 GB-hours of
-function compute. It lists FastAPI support; functions have 1 GB memory and a 300-second timeout.
-Free server mode is one 512 MB instance and sleeps after 15 idle minutes. Confirm the current
-limits in the account console; do not add paid resources.
+The service is intended for local development/reference and optional features. Do not place credentials in Android source, Gradle constants, public GitHub, or APKs. Production deployment, access control, durable storage, licensing review and provider availability require separate owner configuration and verification.
 
-Set or confirm these project settings:
+## External market data caveat
 
-- Git repository: `Ndumiso19894/ai-trading-analyst.`
-- Branch: the branch that Enzonic is meant to deploy. This Arena branch is
-  `arena/8a1d0765-ai-trading-analyst`.
-- Root directory: `backend`
-- Runtime/framework: Python / FastAPI; Python 3.11 is supported.
-- Dependencies: `requirements.txt` is in the selected root. Enzonic says it installs Python
-  dependencies automatically; if the console asks for a build command, use
-  `pip install -r requirements.txt`.
-- Entry point: `main:app`. The shim at `backend/main.py` re-exports `app` from `app.main` so the
-  detector can find it at the configured root. For Enzonic's function deployment, let the
-  platform's FastAPI adapter handle requests; only use a Uvicorn command if the dashboard/logs
-  specifically say it selected server mode and asks for a server start command.
+The backend currently integrates the unofficial Yahoo Finance chart endpoint for XAU/USD only. It is free/keyless to call but may be delayed, rate-limited or changed, has no SLA, and is not guaranteed real-time. Verify current terms, ticker availability, usage limits and licensing before use or redistribution. The Android app does not currently call this provider directly.
 
-The repository push should create a new build/preview if this branch is connected. Wait for the
-build to reach **Ready**. If the console associates the branch preview with a different URL,
-copy that exact URL; the project's production alias may remain unassigned until a ready build is
-promoted. Do not assume the original `.enzonic.dev` URL works merely because it appears in the
-project settings. If the build still fails, share the new final error lines (not tokens or private
-environment values).
+## Android APK build
 
-## Verify and build the phone APK
+The GitHub Actions workflow runs unit tests and packages debug and release APKs. Without owner-controlled release signing secrets, release output is unsigned. Use the debug artifact for sideload testing. CI success does not verify physical-device permissions, launcher appearance, external API access or Google Drive/GitHub synchronization.
 
-After Enzonic reports a ready deployment, open its actual HTTPS deployment URL plus `/health`;
-expected JSON contains `"status":"ok"`. Then manually run GitHub Actions → **Android build** →
-**Run workflow** and pass the exact HTTPS root URL. The workflow runs `scripts/smoke_live_api.py`
-before producing an APK, checking:
+## Cloud authorization
 
-- `/health` and `/api/providers`
-- market candles and gold analysis (requires reachable Yahoo Finance)
-- signal history after analysis
-- risk calculation
-- screenshot upload using a generated PNG
-- wildcard CORS preflight
-
-A smoke-test failure stops the build rather than publishing an APK as verified. The APK URL is
-embedded as the Android default, while the saved Advanced connection setting remains available.
-The screenshot endpoint only validates/samples pixels and always returns `WAIT`; it is not a
-vision model. Market data can be delayed or unavailable. The backend is unauthenticated, so do
-not expose secrets through it.
-
-## Data and free-tier caveats
-
-No API keys are required for the current backend. Never commit `.env`, credentials, or access
-tokens. CORS is wildcard without credentials. SQLite signal history is local storage; Enzonic
-Deploy function/server filesystem persistence across deployments or instances is not guaranteed.
-Do not treat it as durable until verified. Free functions/server behavior and quotas can change;
-avoid paid upgrades unless the owner explicitly approves them.
+Google Drive and GitHub application-level backup/synchronization are not implemented. Arena's connected-app access is separate from OAuth consent for the Android app. Any future Android sync feature must use explicit user authorization, secure token storage, retryable uploads and local-first conflict handling; do not delete local data when remote operations fail.

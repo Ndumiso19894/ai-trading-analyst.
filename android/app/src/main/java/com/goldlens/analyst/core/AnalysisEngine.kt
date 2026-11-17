@@ -116,6 +116,7 @@ object AnalysisEngine {
             direction, price, last.timestampMillis, dataset.timeframe, dataset.source, score,
             reason, evidence, conflicts, latest, structure, zones, entry, stop, target,
             if (direction == Direction.WAIT) null else 2.0,
+            instrument = dataset.instrument,
         )
     }
 
@@ -128,7 +129,8 @@ object AnalysisEngine {
         structure: SwingStructure? = null,
         indicators: IndicatorValues? = null,
     ) = AnalysisResult(Direction.WAIT, price, timestamp, dataset.timeframe, dataset.source,
-        0, reason, emptyList(), listOf(reason), indicators, structure, zones, null, null, null, null)
+        0, reason, emptyList(), listOf(reason), indicators, structure, zones, null, null, null, null,
+        instrument = dataset.instrument)
 
     private fun timeframeMillis(timeframe: String): Long? = when (timeframe.lowercase()) {
         "1m", "1min" -> 60_000L

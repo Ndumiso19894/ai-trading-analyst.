@@ -180,7 +180,8 @@ class FloatingAssistantService : Service() {
         }
         headerTitle?.text = prefs.getString("overlay_signal", "WAIT") ?: "WAIT"
         bubble?.text = when (prefs.getString("overlay_signal", "WAIT")) { "BUY" -> "↑"; "SELL" -> "↓"; else -> "Au" }
-        content.addView(label("GOLDLENS · XAU/USD", gold = true, bold = true))
+        val symbol = prefs.getString("analysis_symbol", "XAU/USD") ?: "XAU/USD"
+        content.addView(label("GOLDLENS · $symbol", gold = true, bold = true))
         content.addView(label(prefs.getString("overlay_details", "No saved analysis yet. Import candles and analyze in GoldLens.") ?: "No analysis."))
         content.addView(label("Overlay analysis uses only locally imported candles; no live price is assumed.", gold = false))
         content.addView(textButton("Analyze saved candles", onClick = { analyzeStoredData() }, fullWidth = true))
@@ -190,10 +191,11 @@ class FloatingAssistantService : Service() {
 
     private fun analyzeStoredData() {
         val timeframe = prefs.getString("timeframe", "1h") ?: "1h"
+        val instrument = prefs.getString("analysis_symbol", "XAU/USD") ?: "XAU/USD"
         scope.launch {
             val dataset = withContext(Dispatchers.IO) {
-                val rows = GoldLensDatabase.get(this@FloatingAssistantService).candleDao().latest("XAU/USD", timeframe, 5_000).asReversed()
-                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", timeframe, System.currentTimeMillis())
+                val rows = GoldLensDatabase.get(this@FloatingAssistantService).candleDao().latest(instrument, timeframe, 5_000).asReversed()
+                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", timeframe, System.currentTimeMillis(), instrument)
             }
             if (dataset == null) {
                 prefs.edit().putString("overlay_details", "No saved candle data for $timeframe. Import an OHLC CSV in GoldLens first.").apply()

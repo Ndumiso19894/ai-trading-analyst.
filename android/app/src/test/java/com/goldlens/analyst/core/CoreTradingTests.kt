@@ -66,6 +66,31 @@ not-a-time,1,2,0.5,1.5,3
         assertClose(1000.0, parsed.candles.first().volume)
     }
 
+    @Test fun csvExportRoundTripsUtcCandlesWithoutLocaleAssumptions() {
+        val source = parityCandles(4)
+        val exported = CsvCandleParser.export(source)
+        assertTrue(exported.startsWith("timestamp,open,high,low,close,volume\n"))
+        val restored = CsvCandleParser.parse(exported).candles
+        assertEquals(source.size, restored.size)
+        source.zip(restored).forEach { (before, after) ->
+            assertEquals(before.timestampMillis, after.timestampMillis)
+            assertClose(before.open, after.open)
+            assertClose(before.high, after.high)
+            assertClose(before.low, after.low)
+            assertClose(before.close, after.close)
+            assertClose(before.volume, after.volume)
+        }
+    }
+
+    @Test fun instrumentRegistryCoversRequestedMarketsWithoutInventingBrokerSpecs() {
+        val expected = setOf("EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD", "USD/CAD",
+            "EUR/GBP", "EUR/JPY", "GBP/JPY", "USD/ZAR", "XAU/USD", "XAG/USD", "XPT/USD")
+        assertEquals(expected, InstrumentRegistry.instruments.map { it.symbol }.toSet())
+        assertTrue(InstrumentRegistry.instruments.all { it.tickSize == null && it.tickValuePerLot == null && it.contractSize == null })
+        assertEquals("XAUUSD.a", InstrumentRegistry.require("XAU/USD").withBrokerSymbol("XAUUSD.a").brokerSymbol)
+        assertNull(InstrumentRegistry.find("BTC/USD"))
+    }
+
     @Test fun riskCalculationUsesUserBrokerContractAndChecksInputs() {
         val result = RiskInput(
             accountBalance = 10_000.0, riskPercent = 1.0, entry = 2_000.0,
@@ -76,19 +101,23 @@ not-a-time,1,2,0.5,1.5,3
         assertClose(0.1, result.positionLots)
         assertClose(200.0, result.potentialProfit)
         assertClose(2.0, result.rewardRisk)
-        assertTrue(runCatching { RiskInput(1_000.0, 10.0, 2000.0, 1990.0, 2020.0).calculate() }.isFailure)
-        assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2000.0, 2000.0, 2020.0).calculate() }.isFailure)
+        val tickBased = RiskInput(10_000.0, 1.0, 2_000.0, 1_990.0, 2_020.0, tickSize = 0.1, tickValuePerLot = 10.0).calculate()
+        assertClose(result.riskPerLot, tickBased.riskPerLot)
+        assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2000.0, 1990.0, 2020.0).calculate() }.isFailure)
+        assertTrue(runCatching { RiskInput(1_000.0, 10.0, 2000.0, 1990.0, 2020.0, contractSize = 1.0).calculate() }.isFailure)
+        assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2000.0, 2000.0, 2020.0, contractSize = 1.0).calculate() }.isFailure)
     }
 
     @Test fun staleLiveDataReturnsWaitButImportedHistoryCanBeAnalysed() {
         val old = parityCandles().map { it.copy(timestampMillis = it.timestampMillis - 90L * 24 * 60 * 60 * 1000) }
         val live = MarketDataset(old, DataSourceKind.LIVE, "test feed", "1h", 0)
-        val imported = live.copy(source = DataSourceKind.IMPORTED_CSV, sourceLabel = "local csv")
+        val imported = live.copy(source = DataSourceKind.IMPORTED_CSV, sourceLabel = "local csv", instrument = "EUR/USD")
         val liveResult = AnalysisEngine.analyze(live, nowMillis = old.last().timestampMillis + 60L * 24 * 60 * 60 * 1000)
         val importedResult = AnalysisEngine.analyze(imported, nowMillis = old.last().timestampMillis + 60L * 24 * 60 * 60 * 1000)
         assertEquals(Direction.WAIT, liveResult.direction)
         assertTrue(liveResult.reason.contains("stale"))
         assertFalse(importedResult.reason.contains("stale"))
+        assertEquals("EUR/USD", importedResult.instrument)
     }
 
     @Test fun repeatedPivotTouchesClusterIntoStrongZonesAndCurrentBarDoesNotLookAhead() {

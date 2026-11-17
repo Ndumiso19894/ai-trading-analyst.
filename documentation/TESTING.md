@@ -1,47 +1,18 @@
-# Verification and testing
+# Testing and verification record
 
-## Executed in this workspace
+## Previous verified runs
 
-- Backend suite after adding the Enzonic shim: `cd backend && python3 -m pytest -q` — 22 passed,
-  one Starlette deprecation warning.
-- New entrypoint import check: `cd backend && python3 -c 'import main; from app.main import app; assert main.app is app'` — passed.
-- Enzonic deployment: owner supplied an Enzica diagnosis that the build failed detection because
-  no FastAPI app was visible at the configured `backend/` root. Added `backend/main.py` to expose
-  the original app as `main:app`. This source change has not yet been confirmed by a new Enzonic
-  build. The supplied URL returns Enzonic `DEPLOYMENT_NOT_FOUND` on `/`, `/health`, `/api/providers`
-  and `/docs`; there is no live API deployment verified yet.
-- Render deployment: no longer selected.
-- Provider test: Yahoo chart endpoint access from this sandbox failed due outbound TLS
-  restrictions. No live market data was retrieved here.
-- Android local toolchain is unavailable in this sandbox. The last CI build (run `44087781450`)
-  embeds the stale Render URL; it is not an Enzonic-ready APK. A fresh build is gated on the
-  Enzonic URL passing live API smoke checks.
+- Backend pytest passed on 2026-11-17: `22 passed, 1 warning` (recorded before current icon/instrument/CSV-export work).
+- Android CI run `44123829333` passed on commit `2b9d3cd909572a197c4a99dce10dfc6ed5a9a5fe`: Gradle `testDebugUnitTest`, `assembleDebug` and `assembleRelease`; APK artifacts were uploaded. This run predates the current instrument selector/export/icon changes.
+- Android manifests and workflow YAML parsed; `git diff --check` passed on the previous checkpoint.
 
-## Live smoke checks after deployment
+## Current changes requiring verification
 
-Manual Android workflow dispatch requires the exact public HTTPS URL and runs
-`scripts/smoke_live_api.py` before building. It checks health, providers, market candles, gold
-analysis, signal history, risk math, screenshot upload and CORS. Market/analysis checks require
-Yahoo access from the host. Screenshot endpoint's expected behavior is local image sampling and
-`WAIT`, not AI chart interpretation. A smoke-test failure prevents APK packaging.
+Current uncommitted work adds adaptive/legacy launcher resources, an instrument registry and selection persistence, symbol-aware Room candle imports, UTC CSV export, and broker specification validation changes. Do not treat these as tested until a fresh Android CI run passes on the resulting commit.
 
-## Backend commands
+## Verification limits
 
-```bash
-cd backend
-pip install -r requirements.txt
-python -m pytest -q
-```
-
-## Frontend commands
-
-```bash
-cd frontend
-npm ci
-npm run build
-```
-
-## Android
-
-The GitHub Actions workflow runs `testDebugUnitTest assembleDebug assembleRelease`. Device
-integration remains outstanding until the deployed Enzonic HTTPS URL passes smoke tests.
+- No emulator/physical-device testing has been performed. Overlay permission and foreground-service behavior need real Android validation.
+- No Android MediaProjection or screenshot capture behavior exists to test.
+- No frontend changes or frontend build have been made during this iteration. The last known backend tests do not validate the Android source.
+- Optional Yahoo data may be unavailable in restricted networks; no live/delayed quote success is claimed for Android.

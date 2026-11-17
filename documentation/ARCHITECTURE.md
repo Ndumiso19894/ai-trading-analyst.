@@ -1,71 +1,50 @@
-# Architecture
+# GoldLens architecture and trust boundaries
 
-## Runtime topology
+## Component map
 
+```text
+Android Kotlin/Compose app
+  ├─ InstrumentRegistry -> selected user-imported OHLC data
+  ├─ CsvCandleParser -> validation/import/export
+  ├─ AnalysisEngine -> TechnicalIndicators + confirmed-pivot support/resistance
+  ├─ RiskInput.calculate -> explicit broker contract/tick data
+  ├─ Room -> candles, analyses/zones, manual journal, settings, backtest/alert records
+  └─ FloatingAssistantService -> user-started overlay over other apps
+
+React/TypeScript dashboard --relative API paths--> optional FastAPI backend
+  ├─ Yahoo Finance chart adapter (unofficial; fixed XAU/USD)
+  ├─ CSV validation/resampling
+  ├─ pandas indicators, signal logic and heuristic levels
+  ├─ CSV EMA-cross backtester and SQLite signal history
+  └─ bounded screenshot image check/color sampler that returns WAIT
 ```
-React + TypeScript (Vite) --relative /api via proxy--> FastAPI
-                                                     ├─ provider adapter (Yahoo chart)
-                                                     ├─ CSV OHLCV import
-                                                     ├─ candle validation + bounded RAM TTL cache
-                                                     ├─ indicators -> structure/SR -> signal/explanation
-                                                     ├─ chronological CSV backtester
-                                                     ├─ local Pillow screenshot sampling (abstains)
-                                                     └─ SQLite signal history/outcome counts
 
-Android Compose client ------------------------------> same FastAPI API
-```
+Android local calculations do not require the backend. The Android app does not currently use the Yahoo provider or present its data as an Android quote feed. Web/backend features and Android features must be described separately.
 
-## Backend modules
+## Android local data model
 
-- `backend/app/main.py`: FastAPI service, health endpoint, API router, CORS.
-- `backend/app/api/routes.py`: market, CSV, analysis, multi-timeframe, risk, backtest,
-  screenshot, history and outcome endpoints.
-- `backend/market_data/providers.py`: async Yahoo chart endpoint; keyless but unofficial.
-- `backend/market_data/models.py`: schema validation, normalization and resampling.
-- `backend/market_data/cache.py`: bounded per-process 60-second cache.
-- `backend/indicators/calculations.py`: pandas/numpy indicator math; warm-up values are NaN.
-- `backend/signals/analysis.py`: evidence aggregation, swing pivots, support/resistance,
-  deterministic natural-language explanation. WAIT on weak/conflicting evidence.
-- `backend/signals/storage.py`: local SQLite history, outcome state, summary counts.
-- `backend/backtesting/engine.py`: causal EMA20/50 crossover test, ATR exits, costs and
-  stop-first ambiguous bar processing.
+Room's v1 schema stores instrument symbol/timeframe/timestamp-keyed candle rows, analysis records and zones, manual trades, settings, backtest record placeholders and alert-rule records. Current changes preserve existing table schemas. There is not yet a migration chain, database export/restore, or sync queue. The selected instrument catalog contains the requested 11 FX pairs and three precious metals; broker aliases and contract values are unverified templates, not exchange/broker facts.
 
-## Market-data constraints
+CSV import accepts common OHLC column names and timestamp/date forms, uses UTC for timestamps without a zone, validates OHLC bounds, orders rows and resolves duplicate timestamps. It does not currently handle decimal-comma input, configurable timezone conversion, preview-before-save, or symbol extraction from file metadata. Export writes sorted UTC ISO-8601 timestamps and locale-independent numeric values.
 
-Ticker is fixed to Yahoo's `XAUUSD=X`. Endpoint access and ticker availability depend on
-provider. Market values are labelled with source and observation timestamp; delayed quote
-possibility is exposed. No live price is invented. 4-hour bars aggregate hourly data;
-other timeframes are requested from provider. No lower-interval generation occurs when
-there are not enough source candles. CSV is the offline path.
+## Analysis and source quality
 
-## Signal logic
+Kotlin indicator math is tested against the Python reference fixture. EMA uses recursive `adjust=False` semantics; RSI and ATR use Wilder alpha `1/period`; Bollinger standard deviation uses population variance; stochastic uses rolling high/low. Warm-up values remain unavailable. Confirmed pivots require right-side bars from the supplied historical prefix. Zone scores are heuristics, not probabilities. Android currently analyzes a single selected timeframe; it does not yet aggregate distinct datasets for higher-timeframe confirmation.
 
-EMA alignment/price, RSI range, MACD histogram and recent swing structure contribute
-signed evidence. A direction requires multiple aligned checks and ATR to construct levels;
-otherwise the result abstains. Live analysis checks higher frames (daily/4H for 1H, 1H/daily for lower frames) and
-forces WAIT when those frames conflict or cannot be retrieved. A single-timeframe CSV is
-marked as not MTF-checked. Stop distance = 1.5 ATR; TP1 = 1.5 ATR and TP2 = 3 ATR, so
-nominal R:R is 1:1 and 1:2. These are rules, not calibrated probabilities. Indicators are
-not statistically independent, and no confidence score is produced.
+A data source and label accompany analysis. In the current Android path the supported data is imported or locally saved CSV. Live/delayed enum variants have stale-data safeguards for future adapters, but no Android live provider is connected. The backend Yahoo adapter is unofficial, XAU/USD-only through API routes, may be delayed or unavailable, and has no real-time/SLA guarantee. No sources should be silently combined.
 
-## Backtest limitations
+## Optional backend
 
-EMA-cross entry is decided on a completed candle and filled at the next bar's open. ATR
-stop/target derive from prior completed data; spread/slippage assumptions are deducted.
-If stop and target occur in a single bar, stop is assumed first. Split is chronological
-70/30 and the out-of-sample pass uses pre-split history for warm-up but only evaluates
-post-split entries. Results are per-unit price P&L, not account return; contract size,
-financing, currency conversion, variable spreads and real execution are not represented.
+The backend provider module is isolated from its API routes and can be replaced later. Current routes restrict market candles/analysis to Yahoo's `XAUUSD=X`; 4H data is resampled from hourly data. The React dashboard is an optional backend client. Backend local SQLite signal history does not constitute Android Room sync or cloud persistence.
 
-## Screenshot path
+The Python EMA-cross backtest enters at next-bar open after prior-bar confirmation, uses ATR stop/target, applies user cost assumptions, resolves same-bar stop/target collisions stop-first, and separates chronological in-sample/out-of-sample evaluation. Results are per-unit, not account returns; no variable broker spread, financing, contract conversion or real fill model is included.
 
-Pillow decodes a bounded PNG/JPEG, downsamples, counts rough greenish/reddish pixels and
-returns WAIT. It cannot identify the chart, candlesticks, levels, instrument, timeframe,
-prices, or indicator values. No AI/vision model is installed. This API must not be described
-as reliable screenshot analysis.
+## Overlay and screenshot boundaries
 
-## Android
+The overlay requires Android's explicit overlay permission and user-started foreground service. It analyzes locally stored candles and does not inspect other applications. It does not capture the display, read MT5 internals, submit orders, or claim broker OHLC.
 
-`android/` contains a native Compose client source using `HttpURLConnection`; emulator
-backend default is `10.0.2.2:8000`. Build not verified: development environment lacks JDK,
-Android SDK and Gradle. Cleartext HTTP is development-only.
+There is no Android MediaProjection workflow or validated chart OCR/vision. The optional backend screenshot endpoint decodes a bounded user-uploaded image, samples rough colors and abstains with WAIT. No exact prices/instrument/timeframe/structure are extracted.
+
+## Unimplemented cloud/background systems
+
+No Google OAuth/Drive backup, GitHub snapshot sync, unified sync manager, WorkManager alerts or continuous background quote polling is implemented. Android periodic work, if added, must respect OS scheduling limits; no uninterrupted monitoring guarantee should be made.

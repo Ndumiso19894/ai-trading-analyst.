@@ -28,6 +28,7 @@ data class MarketDataset(
     val sourceLabel: String,
     val timeframe: String,
     val loadedAtMillis: Long,
+    val instrument: String = "XAU/USD",
 ) {
     fun normalized(): MarketDataset = copy(candles = normalizeCandles(candles))
 }
@@ -96,6 +97,7 @@ data class AnalysisResult(
     val stopLoss: Double?,
     val takeProfit: Double?,
     val rewardRisk: Double?,
+    val instrument: String = "XAU/USD",
 )
 
 data class RiskInput(
@@ -104,7 +106,7 @@ data class RiskInput(
     val entry: Double,
     val stopLoss: Double,
     val takeProfit: Double,
-    val contractSize: Double = 1.0,
+    val contractSize: Double? = null,
     val tickSize: Double? = null,
     val tickValuePerLot: Double? = null,
 )
@@ -125,16 +127,17 @@ fun RiskInput.calculate(): RiskResult {
     require(riskPercent.isFinite() && riskPercent > 0 && riskPercent <= 5) { "Risk percentage must be greater than 0 and no more than 5%." }
     require(entry.isFinite() && entry > 0 && stopLoss.isFinite() && stopLoss > 0 && takeProfit.isFinite() && takeProfit > 0) { "Prices must be positive finite numbers." }
     require(abs(entry - stopLoss) > 0) { "Entry and stop loss must be different." }
-    require(contractSize.isFinite() && contractSize > 0) { "Contract size must be positive." }
     require((tickSize == null) == (tickValuePerLot == null)) { "Enter both tick size and tick value, or leave both blank." }
+    val tick = tickSize
     val tickValue = tickValuePerLot
-    if (tickSize != null && tickValue != null) require(tickSize.isFinite() && tickSize > 0 && tickValue.isFinite() && tickValue > 0) { "Tick size and tick value must be positive." }
+    if (tick != null && tickValue != null) require(tick.isFinite() && tick > 0 && tickValue.isFinite() && tickValue > 0) { "Tick size and tick value must be positive." }
+    if (tick == null || tickValue == null) require(contractSize != null && contractSize.isFinite() && contractSize > 0) { "Enter a verified broker contract size, or both tick size and tick value." }
     val riskMoney = accountBalance * riskPercent / 100.0
     val stopDistance = abs(entry - stopLoss)
     val targetDistance = abs(takeProfit - entry)
-    val riskPerLot = if (tickSize != null && tickValue != null) stopDistance / tickSize * tickValue else stopDistance * contractSize
+    val riskPerLot = if (tick != null && tickValue != null) stopDistance / tick * tickValue else stopDistance * contractSize!!
     require(riskPerLot.isFinite() && riskPerLot > 0) { "Could not calculate risk per lot." }
     val lots = riskMoney / riskPerLot
-    val profitPerLot = if (tickSize != null && tickValue != null) targetDistance / tickSize * tickValue else targetDistance * contractSize
+    val profitPerLot = if (tick != null && tickValue != null) targetDistance / tick * tickValue else targetDistance * contractSize!!
     return RiskResult(riskMoney, riskPercent, riskPerLot, lots, riskMoney, lots * profitPerLot, targetDistance / stopDistance)
 }

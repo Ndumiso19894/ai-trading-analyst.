@@ -1,109 +1,81 @@
-# GoldLens — AI Trading Analyst
+# GoldLens — Trading Analyst
 
-Free-first XAU/USD research and analysis workspace. This codebase includes a working
-FastAPI backend, React/TypeScript dashboard, deterministic indicator/signal/backtest
-engines, CSV ingestion, SQLite signal log, and a native Android source project.
+GoldLens is the existing Android-first analysis project with a native Kotlin/Compose app, FastAPI reference/backend, and React/TypeScript dashboard. Its local Android analysis does not require a hosted API. No market prices or signals are fabricated.
 
-> **Not financial advice.** Data may be delayed or unavailable; calculations are
-> heuristic. Signals and backtests do not guarantee fills or future performance.
-> Validate all prices and contract details with your broker before any decision.
+> **Not financial advice.** Analysis is heuristic, broker specifications vary, and neither signals nor historical simulations guarantee fills or future performance.
 
-## Current capabilities
+## Current functionality
 
-- Yahoo Finance chart endpoint integration (`XAUUSD=X`) — free and keyless but unofficial,
-  may be delayed/rate-limited/changed; no real-time or SLA guarantee. Availability in a
-  deployment depends on network access. Environment network restrictions may block it.
-- CSV OHLCV import and validation; 60-second bounded in-memory provider candle cache.
-- Interactive TradingView Lightweight Charts candlestick chart.
-- EMA 20/50/100/200, RSI(14), MACD(12/26/9), ATR(14), Bollinger Bands and Stochastic.
-- Heuristic swing structure and pivot-cluster support/resistance.
-- Evidence-based BUY/SELL/WAIT with ATR stops and targets; multi-timeframe comparison.
-- Position/risk calculator (user-supplied contract multiplier).
-- CSV backtest (EMA cross; next-bar-open execution, spread/slippage assumptions,
-  chronological 70/30 split, stop-first intrabar collision rule).
-- SQLite signal log and best-effort outcome refresh from later provider bars at the signal timeframe.
-- Screenshot upload is **image validation/color sampling only** and deliberately always
-  returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
-- Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
-  image upload. The last CI APK build targeted Render and is stale for Enzonic. A fresh APK will
-  be built only after an actual Enzonic URL passes the live API smoke checks.
+### Android
+
+- Offline Kotlin indicators, market-structure summary, pivot-cluster support/resistance and explainable BUY/SELL/WAIT over user-imported OHLC.
+- Room persistence for local candle sets, saved analyses/zones, manual journal and settings.
+- CSV import from Android's document picker and CSV export of the selected candle set. Import currently loads after validation; it does not offer a preview.
+- Instrument selector/catalog covering EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, NZD/USD, USD/CAD, EUR/GBP, EUR/JPY, GBP/JPY, USD/ZAR, XAU/USD, XAG/USD and XPT/USD. Broker contract/tick/volume details remain unset until verified and entered.
+- Offline risk calculator requiring user-supplied broker contract size or tick specifications; account currency conversion is not implemented.
+- User-started, draggable/expandable overlay analyzing locally saved candles, with explicit overlay permission and foreground notification.
+- GoldLens launcher icon using Android adaptive and legacy launcher resources.
+
+### Backend and web dashboard
+
+- FastAPI endpoints for OHLC CSV, indicators, analysis, multi-timeframe analysis, risk, historical CSV backtest, signal history and screenshot upload.
+- React/TypeScript dashboard with charts, provider data actions, analysis, calculator and backend backtesting.
+- The only configured external market-data adapter is Yahoo Finance's unofficial chart endpoint, fixed to XAU/USD. It is free/keyless to call but may be delayed, rate-limited or changed, has no SLA, and is not guaranteed real-time. Coverage of the Android instrument catalog is not verified. Use only where its current terms permit; CSV is the reliable user-controlled offline route.
+- Screenshot endpoint does bounded image validation and rough color sampling, then abstains with WAIT. It does not perform chart/OHLC recognition.
+
+## Known not implemented
+
+- Android external market-data integration, source-mode comparison, bid/ask/spread, or validated coverage across the registry.
+- Android MediaProjection capture, crop/preview, genuine screenshot chart recognition, and desktop MT5 bridge.
+- Kotlin/Android backtesting UI/engine (the CSV backtester exists in FastAPI only).
+- Android WorkManager alerts, Google Drive OAuth/backup, GitHub data snapshots and unified sync manager.
+- Android multi-timeframe analysis from separate datasets, Room migrations, CSV preview, and exports of journals/signals/backtests/zones.
+- Physical-device or emulator acceptance testing.
 
 ## Run locally
 
-Requirements: Python 3.11+, Node.js 20+, and for Android separately JDK 17 + Android SDK
-(API 35) + Gradle 8.9-compatible installation.
+Requirements: Python 3.11+, Node.js 20+, and (for Android) JDK 17, Android SDK API 35, Build Tools 35.0.0 and Gradle 8.9.
 
 ### Backend
 
 ```bash
 cd backend
 python -m venv .venv
-# Linux/macOS: source .venv/bin/activate; Windows: .venv\\Scripts\\activate
+# activate the environment, then:
 pip install -r requirements.txt
-cp ../.env.example ../.env   # optional; keep secrets out of Git
-python run.py                # binds 0.0.0.0:8000; Swagger at /docs
+python run.py                 # 0.0.0.0:8000
 ```
 
-### Frontend (second terminal)
+The Yahoo endpoint may be unavailable in restricted networks; the API and CSV-based functions remain separate from the Android offline engine.
+
+### Frontend
 
 ```bash
 cd frontend
 npm ci
-npm run dev                  # http://localhost:5173
+npm run dev                   # Vite proxies relative /api requests to FastAPI
 ```
 
-Vite proxies `/api` and `/health` to the backend. The browser must not call localhost
-from a remote preview. Current provider API calls originate from the backend.
-
-### Tests / production build
+### Tests and builds
 
 ```bash
 cd backend && python -m pytest -q
 cd ../frontend && npm ci && npm run build
+cd ../android && gradle testDebugUnitTest assembleDebug assembleRelease
 ```
 
-### Android source
+Debug APK output: `android/app/build/outputs/apk/debug/app-debug.apk`. Android CI also uploads debug and release APK artifacts from successful runs. Without owner-provided release signing secrets, release APK is unsigned; use debug APK for straightforward sideload testing.
 
-```bash
-cd android
-# With JDK 17, Android SDK 35, and Gradle 8.9 installed:
-gradle assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
-```
+## Data integrity notes
 
-The app checks `/health` on launch when a default HTTPS URL is configured. Until the Enzonic
-URL is live and verified, the default remains blank rather than pointing to an untested host.
-**Advanced connection settings** lets you save a manual HTTPS endpoint on-device. HTTP is only
-allowed in debug builds for local development.
-
-## CSV format
-
-UTF-8 CSV with columns `timestamp,open,high,low,close` and optional `volume`.
-Timestamps are interpreted as UTC when timezone is absent. Rows are normalized, invalid
-OHLC records dropped, duplicates resolved by keeping the last timestamp record. Market
-CSV uploads are processed in memory and not retained. Backtest requires at least 440 bars.
-
-## Data-source caveat
-
-Provider details are exposed at `/api/providers`. Yahoo Finance's chart endpoint is an
-unofficial endpoint and has no product SLA or guaranteed real-time XAU/USD quote. Request
-limits, retention, terms and ticker availability can change; review the provider's current
-terms before redistribution or commercial use. No API key is required. Never assume this
-is an executable broker price. If access is unavailable, use downloaded broker/provider
-CSV you are authorized to use; the analyzer works offline with CSV.
-
-## Phone-first backend deployment
-
-Enzonic Deploy is the current free hosting target. The build failed because its FastAPI detector
-could not see the nested app; `backend/main.py` now exposes the existing FastAPI instance at the
-configured `backend/` root. Enzonic currently returns `DEPLOYMENT_NOT_FOUND` for the supplied
-project URL, so no live backend is verified. Android keeps an advanced saved URL override and has
-no fabricated default until a real deployment passes checks. See `documentation/DEPLOYMENT.md`.
+- Local Android import is user-supplied data and stored by instrument/timeframe. Parser treats timezone-less date-times as UTC; decimal-comma locale files need conversion before import.
+- Provider data in the Python service is not an executable broker quote and its delay/availability is not guaranteed.
+- No Render/Enzonic or other always-on hosted backend is required or selected. Do not add credentials to the APK or public repository.
+- The overlay does not read/control MT5, capture screen content, or place orders.
 
 ## Documentation
 
-- `DEVELOPMENT_ROADMAP.md` — status and remaining scope
-- `documentation/ARCHITECTURE.md` — components and design constraints
-- `documentation/TESTING.md` — executed and planned verification
-- `documentation/CHANGELOG.md` — milestones
-- `android/README.md` — native build notes
+- `DEVELOPMENT_ROADMAP.md` — implementation and verification status
+- `documentation/ARCHITECTURE.md` — current component topology and limitations
+- `documentation/TESTING.md` — test/build record
+- `android/README.md` — Android build, APK and signing instructions

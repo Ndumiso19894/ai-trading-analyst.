@@ -11,6 +11,20 @@ import java.time.format.DateTimeParseException
  data class CsvImportResult(val candles: List<Candle>, val acceptedRows: Int, val skippedRows: Int)
 
 object CsvCandleParser {
+    /** Exports normalized UTC OHLCV records in a round-trippable, locale-independent CSV format. */
+    fun export(candles: List<Candle>): String = buildString {
+        appendLine("timestamp,open,high,low,close,volume")
+        normalizeCandles(candles).forEach { candle ->
+            append(Instant.ofEpochMilli(candle.timestampMillis).toString())
+            append(',').append(candle.open.toString())
+            append(',').append(candle.high.toString())
+            append(',').append(candle.low.toString())
+            append(',').append(candle.close.toString())
+            append(',').append(candle.volume.toString())
+            appendLine()
+        }
+    }
+
     fun parse(csv: String): CsvImportResult {
         require(csv.length <= 20_000_000) { "CSV file exceeds the 20 MB import limit." }
         val records = parseRecords(csv)
