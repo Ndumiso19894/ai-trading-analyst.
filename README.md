@@ -25,8 +25,9 @@ engines, CSV ingestion, SQLite signal log, and a native Android source project.
 - Screenshot upload is **image validation/color sampling only** and deliberately always
   returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
 - Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
-  image upload, with a GitHub Actions build workflow. Local toolchain downloads are blocked
-  in this sandbox; consult workflow results for build/APK status.
+  image upload. CI successfully built a signed-debug APK and an unsigned release APK. The
+  [Actions run and APK artifact](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44065622695)
+  is available for 30 days; a release keystore is owner-supplied.
 
 ## Run locally
 

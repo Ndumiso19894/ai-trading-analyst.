@@ -34,12 +34,13 @@ is not equivalent to validated on a real broker/feed**.
 - No production deployment hardening, authentication, cloud synchronization or push alerts.
 - Frontend build was verified; browser-driven end-to-end test suite is not present.
 
-## Android — source scaffold only
+## Android — build verified; app feature scope remains partial
 - [x] Kotlin / Jetpack Compose source, analysis/market/history API actions and screenshot picker
 - [x] Secure environment-variable release signing configuration; no credentials committed
-- [x] Added GitHub Actions JDK 17/API 35/Gradle 8.9 build workflow (run status pending)
-- [ ] Local JDK/Android SDK downloads are blocked by sandbox network restrictions; verify CI
-  compilation and retrieve APK artifact before claiming the native build is complete.
+- [x] GitHub Actions build passed on 2026-11-17 with JDK 17, Android API 35, Build Tools 35.0.0 and Gradle 8.9; `testDebugUnitTest`, `assembleDebug`, and `assembleRelease` tasks succeeded.
+- [x] CI uploaded signed-debug and unsigned-release APKs as a 30-day Actions artifact.
+- [ ] No Android unit test source or physical/emulator device validation yet; release APK remains unsigned until owner signing secrets are configured.
+- [ ] Local toolchain download remains blocked in sandbox; artifact download from this sandbox is also blocked by its artifact-storage egress restriction.
 
 ## Not started / outstanding
 - True local vision model integration, OCR, chart-pattern/screenshot inference tests

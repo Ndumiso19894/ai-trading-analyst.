@@ -11,10 +11,11 @@
 - Added safe image upload, Pillow decode and color sampling that always abstains (not a chart
   vision engine); tested API behavior.
 - Added Kotlin/Compose Android client source; initial local build blocked by missing toolchain.
-- Added Android CI build workflow using JDK 17, Android API 35 and Gradle 8.9; it uploads a
-  debug-signed APK and unsigned release APK. No release secrets are stored in CI.
-- Tests: backend suite and frontend production build executed; live provider request blocked
-  by sandbox networking. Android workflow result is pending.
+- Added Android CI build workflow using JDK 17, Android API 35 and Gradle 8.9; successful run
+  `44065622695` uploaded the signed-debug and unsigned-release APKs. No release secrets are
+  stored in CI. Owner-supplied secrets enable release signing.
+- Local Android tool installation and artifact retrieval are blocked by sandbox network
+  restrictions; CI compilation and APK packaging were verified remotely.
 
 ## [0.1.0] — Phase 1 foundation
 - Initial FastAPI API, React dashboard, project layout, docs and environment configuration.

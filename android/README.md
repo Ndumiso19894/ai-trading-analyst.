@@ -57,8 +57,13 @@ release APK unsigned. No signing credential has been created or exposed in this 
 and Gradle 8.9. It runs `testDebugUnitTest`, `assembleDebug` and `assembleRelease`, then
 uploads APKs as the `goldlens-android-apks` artifact for 30 days.
 
-Open the successful workflow run in GitHub Actions → **Artifacts** →
-`goldlens-android-apks`; download and unzip it. The debug APK is signed and installable for
-testing; release is signed only when all four owner secrets are configured. On the phone,
+The verified run is [Android build #44065622695](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44065622695)
+on commit `aca26e63`. Open the run in GitHub Actions → **Artifacts** →
+`goldlens-android-apks`; download and unzip it on a phone or computer. CI verified both
+`app-debug.apk` (signed with the standard debug key, installable for testing) and
+`app-release-unsigned.apk`. The release APK is not installable until signed; configure the
+four owner secrets above and rerun the workflow for a signed release. The sandbox could not
+download the Action artifact archive because its blob-storage host is blocked, but the
+artifact is available from the linked GitHub run for its 30-day retention. On the phone,
 allow installation from the browser/file manager if prompted. Keep the release key secure
 and backed up; losing it prevents signing compatible future updates.

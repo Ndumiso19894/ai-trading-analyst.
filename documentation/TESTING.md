@@ -9,8 +9,16 @@
 - Provider smoke test: called Yahoo chart endpoint for XAUUSD=X; **failed** because sandbox
   outbound network closed TLS to provider. No live data was retrieved; endpoint use is not
   verified in this environment.
-- Android: build attempt not available. `java`, `gradle`, `kotlinc`, `ANDROID_HOME`, and
-  `ANDROID_SDK_ROOT` are absent. No APK was generated.
+- Android local toolchain: `java`, `gradle`, `kotlinc`, `ANDROID_HOME`, and
+  `ANDROID_SDK_ROOT` are absent. Debian package mirrors, GitHub release-asset redirects, and
+  Google SDK downloads were blocked from this sandbox.
+- Android remote build: GitHub Actions run `44065622695` passed on commit `aca26e6`; JDK 17,
+  Android API 35 / Build Tools 35.0.0, Gradle 8.9, `testDebugUnitTest`, `assembleDebug`,
+  `assembleRelease`, and artifact upload all succeeded. APK artifact is `goldlens-android-apks`
+  (15,125,543 bytes, 30-day retention). The Gradle unit-test task has no authored Android
+  unit test cases yet. Release APK is unsigned because owner signing secrets were not set.
+  Sandbox download of the artifact archive was blocked by its `productionresultssa...blob`
+  storage host; download through the linked GitHub Actions run in a browser.
 
 Always rerun commands against the current source before reporting a result.
 
