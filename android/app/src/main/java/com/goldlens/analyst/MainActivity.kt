@@ -449,7 +449,8 @@ private fun JournalTab(database: GoldLensDatabase, timeframe: String) {
                 Text("${item.direction} · ${item.timeframe} · ${price(item.entry)}", color = if (item.direction == "BUY") Green else Red, fontWeight = FontWeight.Bold)
                 Text("Stop ${item.stopLoss?.let(::price) ?: "—"} · Target ${item.takeProfit?.let(::price) ?: "—"}", color = Muted, style = MaterialTheme.typography.bodySmall)
                 if (item.notes.isNotBlank()) Text(item.notes)
-                Text("Opened ${java.time.Instant.ofEpochMilli(item.openedAtMillis)} · ${if (item.closedAtMillis == null) "OPEN" else "Closed at ${item.exitPrice?.let(::price) ?: "—"}")}", color = Muted, style = MaterialTheme.typography.labelSmall)
+                val closeDescription = if (item.closedAtMillis == null) "OPEN" else "Closed at ${item.exitPrice?.let(::price) ?: "—"}"
+                Text("Opened ${java.time.Instant.ofEpochMilli(item.openedAtMillis)} · $closeDescription", color = Muted, style = MaterialTheme.typography.labelSmall)
                 if (item.closedAtMillis == null) TextButton(onClick = {
                     scope.launch {
                         try {
