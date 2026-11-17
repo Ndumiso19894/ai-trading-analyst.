@@ -36,10 +36,10 @@ private fun GoldLensScreen(context: Context) {
     var baseUrl by remember {
         mutableStateOf(preferences.getString("backend_url", BuildConfig.DEFAULT_BACKEND_URL) ?: BuildConfig.DEFAULT_BACKEND_URL)
     }
-    var response by remember { mutableStateOf("Connecting to the GoldLens API. No sample prices are shown.") }
+    var response by remember { mutableStateOf("No sample prices are shown. Connect to the deployed API to load data.") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    var connectionState by remember { mutableStateOf("Checking secure API connection…") }
+    var connectionState by remember { mutableStateOf(if (BuildConfig.DEFAULT_BACKEND_URL.isBlank()) "Set the deployed HTTPS URL in Advanced connection settings" else "Checking secure API connection…") }
     var showAdvanced by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -69,7 +69,9 @@ private fun GoldLensScreen(context: Context) {
         }
     }
 
-    LaunchedEffect(Unit) { request("/health") }
+    LaunchedEffect(Unit) {
+        if (baseUrl.isNotBlank()) request("/health")
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) request("/api/screenshot/analyze", uri)
     }
@@ -109,11 +111,11 @@ private fun GoldLensScreen(context: Context) {
                             preferences.edit().putString("backend_url", it).apply()
                         },
                         label = { Text("Backend HTTPS URL") },
-                        placeholder = { Text("https://your-api.onrender.com") },
+                        placeholder = { Text("https://your-free-python-host.example") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text("The default API is preconfigured. Only change this if you have another trusted HTTPS server.", style = MaterialTheme.typography.bodySmall)
+                    Text("Enter the deployed API's HTTPS address here. Once verified, it will be preconfigured by default in a future APK.", style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = { request("/health") }, enabled = !busy) { Text("Test connection") }
                 }
             }
@@ -143,7 +145,7 @@ private fun GoldLensScreen(context: Context) {
 private fun getJson(address: String): String {
     val connection = URL(address).openConnection() as HttpURLConnection
     connection.connectTimeout = 30000
-    connection.readTimeout = 90000 // Render free services can cold-start after inactivity.
+    connection.readTimeout = 90000 // Allow for a host-side cold start or slow upstream provider.
     connection.requestMethod = "GET"
     connection.useCaches = false
     return try {

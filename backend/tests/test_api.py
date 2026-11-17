@@ -65,7 +65,7 @@ def test_data_api_restricts_unconfigured_ticker():
     assert r.status_code==400
 
 def test_cors_is_compatible_with_mobile_and_not_cookie_credentialed():
-    response=client.options("/api/providers",headers={"Origin":"https://goldlens-xau-api-ndumiso19894.onrender.com","Access-Control-Request-Method":"GET"})
+    response=client.options("/api/providers",headers={"Origin":"https://goldlens.example","Access-Control-Request-Method":"GET"})
     assert response.status_code==200
     assert response.headers.get("access-control-allow-origin")=="*"
     assert response.headers.get("access-control-allow-credentials") is None
