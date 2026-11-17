@@ -1,11 +1,16 @@
 name: Android build
 
 on:
+  push:
+    branches: [main, 'arena/**']
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
     inputs:
       backend_url:
-        description: 'Verified public HTTPS API root URL; manual runs smoke-test the live endpoints before embedding it'
-        required: true
+        description: 'Optional verified HTTPS backend URL; if supplied, the workflow smoke-tests it before packaging'
+        required: false
         type: string
 
 permissions:
@@ -42,7 +47,7 @@ jobs:
       - name: Install Android API 35 build tools
         run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
       - name: Smoke-test public HTTPS API before building phone APK
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.backend_url != ''
         env:
           BACKEND_URL: ${{ github.event.inputs.backend_url || '' }}
         run: python3 scripts/smoke_live_api.py
@@ -82,9 +87,9 @@ jobs:
             exit 2
           fi
           if [[ -z "$BACKEND_URL" ]]; then
-            echo "No deployed URL supplied; building an unconfigured development APK only."
+            echo "No hosted API supplied; building the offline-capable APK with no server default."
           else
-            echo "Embedding verified backend URL: $BACKEND_URL"
+            echo "Embedding smoke-tested backend URL: $BACKEND_URL"
           fi
           gradle --no-daemon --stacktrace -PbackendBaseUrl="$BACKEND_URL" testDebugUnitTest assembleDebug assembleRelease > "$RUNNER_TEMP/android-gradle.log" 2>&1
           result=$?

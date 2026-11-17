@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 val configuredBackendUrl = providers.gradleProperty("backendBaseUrl")
@@ -15,8 +16,8 @@ android {
         applicationId = "com.goldlens.analyst"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.3.0"
+        versionCode = 3
+        versionName = "0.4.0"
         buildConfigField("String", "DEFAULT_BACKEND_URL", "\"$configuredBackendUrl\"")
     }
     compileOptions {
@@ -54,6 +55,11 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.core:core-ktx:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }
