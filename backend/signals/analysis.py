@@ -40,7 +40,8 @@ def levels(frame: pd.DataFrame, lookback: int = 120, tolerance_atr: float = 0.35
             cluster = next((c for c in clusters if abs(c[0]-value) <= tol), None)
             if cluster: cluster[0] = (cluster[0]*cluster[1]+value)/(cluster[1]+1); cluster[1]+=1
             else: clusters.append([value, 1])
-        result[side] = [{"price":round(c[0], 4), "touches":c[1], "strength":"strong" if c[1]>=3 else "moderate" if c[1]==2 else "weak"} for c in clusters[:5]]
+        # Keep the computed price level unrounded; presentation layers apply instrument precision.
+        result[side] = [{"price":float(c[0]), "touches":c[1], "strength":"strong" if c[1]>=3 else "moderate" if c[1]==2 else "weak"} for c in clusters[:5]]
     return result
 
 

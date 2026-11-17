@@ -8,7 +8,12 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
- data class CsvImportResult(val candles: List<Candle>, val acceptedRows: Int, val skippedRows: Int)
+data class CsvImportResult(
+    val candles: List<Candle>,
+    val acceptedRows: Int,
+    val skippedRows: Int,
+    val sourcePrecision: Int? = null,
+)
 
 object CsvCandleParser {
     /** Exports normalized UTC OHLCV records in a round-trippable, locale-independent CSV format. */
@@ -41,24 +46,37 @@ object CsvCandleParser {
         val volumeIndex = headers["volume"]
         val parsed = mutableListOf<Candle>()
         var skipped = 0
+        var sourcePrecision: Int? = null
         records.drop(1).filter { row -> row.any(String::isNotBlank) }.forEach { row ->
             try {
+                val rawPrices = listOf(row.required(openIndex), row.required(highIndex), row.required(lowIndex), row.required(closeIndex))
                 val candle = Candle(
                     timestampMillis = parseTimestamp(row.required(timeIndex)),
-                    open = row.required(openIndex).toDouble(),
-                    high = row.required(highIndex).toDouble(),
-                    low = row.required(lowIndex).toDouble(),
-                    close = row.required(closeIndex).toDouble(),
+                    open = rawPrices[0].toDouble(),
+                    high = rawPrices[1].toDouble(),
+                    low = rawPrices[2].toDouble(),
+                    close = rawPrices[3].toDouble(),
                     volume = volumeIndex?.let { row.getOrNull(it)?.trim()?.takeIf(String::isNotEmpty)?.toDouble() } ?: 0.0,
                 )
-                if (candle.isValid()) parsed += candle else skipped++
+                if (candle.isValid()) {
+                    parsed += candle
+                    val rowPrecision = rawPrices.maxOf { decimalPlaces(it) }
+                    sourcePrecision = maxOf(sourcePrecision ?: 0, rowPrecision)
+                } else skipped++
             } catch (_: Exception) {
                 skipped++
             }
         }
         require(parsed.isNotEmpty()) { "No valid OHLC rows could be read from the CSV." }
         val normalized = normalizeCandles(parsed)
-        return CsvImportResult(normalized, normalized.size, skipped + (parsed.size - normalized.size))
+        return CsvImportResult(normalized, normalized.size, skipped + (parsed.size - normalized.size), sourcePrecision)
+    }
+
+    private fun decimalPlaces(value: String): Int {
+        val normalized = value.trim()
+        val mantissa = normalized.substringBefore('e', missingDelimiterValue = normalized).substringBefore('E')
+        val exponent = normalized.substringAfterLast('e', normalized.substringAfterLast('E', "0")).toIntOrNull() ?: 0
+        return (mantissa.substringAfter('.', "").length - exponent).coerceIn(0, 8)
     }
 
     private fun List<String>.required(index: Int): String = getOrNull(index)?.trim()?.takeIf(String::isNotEmpty)

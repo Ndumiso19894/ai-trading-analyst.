@@ -30,6 +30,7 @@ import com.goldlens.analyst.R
 import com.goldlens.analyst.core.AnalysisEngine
 import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.MarketDataset
+import com.goldlens.analyst.core.InstrumentPrice
 import com.goldlens.analyst.core.MultiTimeframeAnalyzer
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.toCandle
@@ -197,7 +198,7 @@ class FloatingAssistantService : Service() {
         scope.launch {
             val dataset = withContext(Dispatchers.IO) {
                 val rows = GoldLensDatabase.get(this@FloatingAssistantService).candleDao().latest(instrument, timeframe, 5_000).asReversed()
-                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, rows.first().toDataSourceKind(), rows.first().sourceLabel, timeframe, System.currentTimeMillis(), instrument)
+                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, rows.first().toDataSourceKind(), rows.first().sourceLabel, timeframe, System.currentTimeMillis(), instrument, rows.first().sourcePrecision)
             }
             if (dataset == null) {
                 prefs.edit().putString("overlay_details", "No saved candle data for $timeframe. Fetch provider candles or import an OHLC CSV in GoldLens first.").apply()
@@ -214,9 +215,15 @@ class FloatingAssistantService : Service() {
             val summary = buildString {
                 append("${result.direction} · ${result.instrument} · ${result.timeframe} · ${result.reason}\n")
                 append("Multi-timeframe: ${mtf.agreement} · ${mtf.explanation}").appendLine()
-                result.price?.let { append("Last saved candle close: ${format(it)}\n") }
-                result.stopLoss?.let { append("Stop ${format(it)} · Target ${format(result.takeProfit ?: it)} · R:R ${format(result.rewardRisk ?: 0.0)}\n") }
-                result.zones.take(3).forEach { append("${it.side} ${it.strength}: ${format(it.lower)}–${format(it.upper)} (${it.touches} touches, ${it.status})\n") }
+                result.price?.let { append("Last saved candle close: ${format(it, result.instrument, dataset.sourcePrecision)}\n") }
+                result.stopLoss?.let {
+                    val target = result.takeProfit ?: it
+                    val pointSize = prefs.getString("metal_point_size_${result.instrument}", "")?.toDoubleOrNull()
+                    val stopDistance = InstrumentPrice.unitDistanceText(result.instrument, result.entry, it, pointSize)
+                    val targetDistance = InstrumentPrice.unitDistanceText(result.instrument, result.entry, target, pointSize)
+                    append("Stop ${format(it, result.instrument, dataset.sourcePrecision)}${stopDistance?.let { distance -> " ($distance)" } ?: ""} · Target ${format(target, result.instrument, dataset.sourcePrecision)}${targetDistance?.let { distance -> " ($distance)" } ?: ""} · R:R ${String.format(Locale.US, "%.2f", result.rewardRisk ?: 0.0)}\n")
+                }
+                result.zones.take(3).forEach { append("${it.side} ${it.strength}: ${format(it.lower, result.instrument, dataset.sourcePrecision)}–${format(it.upper, result.instrument, dataset.sourcePrecision)} (${it.touches} touches, ${it.status})\n") }
             }
             prefs.edit().putString("overlay_signal", result.direction.name).putString("overlay_details", summary).apply()
             refreshPanel()
@@ -294,7 +301,7 @@ class FloatingAssistantService : Service() {
             .addAction(0, "Stop overlay", stopIntent).build()
     }
 
-    private fun format(value: Double) = String.format(Locale.US, "%.2f", value)
+    private fun format(value: Double, instrument: String, sourcePrecision: Int?) = InstrumentPrice.format(value, instrument, sourcePrecision)
 
     private var downX = 0f
     private var downY = 0f

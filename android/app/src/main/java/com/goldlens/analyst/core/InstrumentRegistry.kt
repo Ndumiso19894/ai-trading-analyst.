@@ -10,6 +10,9 @@ data class InstrumentSpec(
     val brokerSymbol: String,
     val displayDecimals: Int,
     val quoteCurrency: String,
+    val pipSize: Double? = null,
+    /** Optional instrument-specific metal display point size; never inferred from Forex rules. */
+    val pointSize: Double? = null,
     val tickSize: Double? = null,
     val tickValuePerLot: Double? = null,
     val contractSize: Double? = null,
@@ -20,6 +23,8 @@ data class InstrumentSpec(
     init {
         require(symbol.matches(Regex("^[A-Z]{3}/[A-Z]{3}$")))
         require(displayDecimals in 0..8)
+        require(pipSize == null || pipSize.isFinite() && pipSize > 0.0)
+        require(pointSize == null || pointSize.isFinite() && pointSize > 0.0)
         require((tickSize == null) == (tickValuePerLot == null))
     }
 
@@ -38,15 +43,17 @@ object InstrumentRegistry {
         brokerSymbol = symbol.replace("/", ""),
         displayDecimals = decimals,
         quoteCurrency = symbol.substringAfter('/'),
+        pipSize = if (symbol.endsWith("/JPY")) 0.01 else 0.0001,
     )
 
-    private fun metal(symbol: String, name: String, decimals: Int = 2) = InstrumentSpec(
+    private fun metal(symbol: String, name: String, decimals: Int = 2, pointSize: Double? = null) = InstrumentSpec(
         symbol = symbol,
         displayName = name,
         assetClass = AssetClass.PRECIOUS_METAL,
         brokerSymbol = symbol.replace("/", ""),
         displayDecimals = decimals,
         quoteCurrency = symbol.substringAfter('/'),
+        pointSize = pointSize,
     )
 
     val instruments: List<InstrumentSpec> = listOf(
@@ -62,7 +69,7 @@ object InstrumentRegistry {
         forex("GBP/JPY", "British Pound / Japanese Yen", 3),
         forex("USD/ZAR", "US Dollar / South African Rand"),
         metal("XAU/USD", "Gold / US Dollar"),
-        metal("XAG/USD", "Silver / US Dollar"),
+        metal("XAG/USD", "Silver / US Dollar", decimals = 3),
         metal("XPT/USD", "Platinum / US Dollar"),
     )
 

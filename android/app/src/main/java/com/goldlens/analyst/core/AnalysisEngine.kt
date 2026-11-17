@@ -54,11 +54,11 @@ object AnalysisEngine {
 
         val rsi = latest.rsi14
         if (rsi != null) when {
-            rsi in 52.0..70.0 -> { score++; evidence += "RSI(14) supports bullish momentum (${format(rsi)})." }
-            rsi in 30.0..48.0 -> { score--; evidence += "RSI(14) supports bearish momentum (${format(rsi)})." }
-            rsi > 70.0 -> conflicts += "RSI(14) is overbought (${format(rsi)}); avoid chasing."
-            rsi < 30.0 -> conflicts += "RSI(14) is oversold (${format(rsi)}); avoid chasing."
-            else -> conflicts += "RSI(14) is neutral (${format(rsi)})."
+            rsi in 52.0..70.0 -> { score++; evidence += "RSI(14) supports bullish momentum (${formatMetric(rsi)})." }
+            rsi in 30.0..48.0 -> { score--; evidence += "RSI(14) supports bearish momentum (${formatMetric(rsi)})." }
+            rsi > 70.0 -> conflicts += "RSI(14) is overbought (${formatMetric(rsi)}); avoid chasing."
+            rsi < 30.0 -> conflicts += "RSI(14) is oversold (${formatMetric(rsi)}); avoid chasing."
+            else -> conflicts += "RSI(14) is neutral (${formatMetric(rsi)})."
         } else conflicts += "RSI is unavailable during warm-up."
 
         val histogram = latest.macdHistogram
@@ -79,10 +79,10 @@ object AnalysisEngine {
         val resistance = zones.filter { it.side == ZoneSide.RESISTANCE && it.status == ZoneStatus.ACTIVE }
             .minByOrNull { abs(price - it.midpoint) }
         if (support != null && abs(price - support.midpoint) <= atr * 0.6) {
-            score++; evidence += "Price is near ${support.strength} ${support.timeframe} support (${format(support.lower)}–${format(support.upper)})."
+            score++; evidence += "Price is near ${support.strength} ${support.timeframe} support (${InstrumentPrice.format(support.lower, dataset.instrument, dataset.sourcePrecision)}–${InstrumentPrice.format(support.upper, dataset.instrument, dataset.sourcePrecision)})."
         }
         if (resistance != null && abs(price - resistance.midpoint) <= atr * 0.6) {
-            score--; conflicts += "Price is near ${resistance.strength} ${resistance.timeframe} resistance (${format(resistance.lower)}–${format(resistance.upper)})."
+            score--; conflicts += "Price is near ${resistance.strength} ${resistance.timeframe} resistance (${InstrumentPrice.format(resistance.lower, dataset.instrument, dataset.sourcePrecision)}–${InstrumentPrice.format(resistance.upper, dataset.instrument, dataset.sourcePrecision)})."
         }
         val retestZone = zones.firstOrNull { it.status == ZoneStatus.RETESTING }
         if (retestZone != null) {
@@ -144,5 +144,5 @@ object AnalysisEngine {
         else -> null
     }
 
-    private fun format(value: Double) = String.format(java.util.Locale.US, "%.2f", value)
+    private fun formatMetric(value: Double) = String.format(java.util.Locale.US, "%.2f", value)
 }

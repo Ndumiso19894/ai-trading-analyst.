@@ -33,6 +33,7 @@ data class CandleEntity(
     val volume: Double,
     @ColumnInfo(defaultValue = "'IMPORTED_CSV'") val source: String = "IMPORTED_CSV",
     @ColumnInfo(name = "source_label", defaultValue = "'Imported CSV'") val sourceLabel: String = "Imported CSV",
+    @ColumnInfo(name = "source_precision") val sourcePrecision: Int? = null,
 )
 
 @Entity(tableName = "analysis_records", indices = [Index(value = ["timestamp_millis"])])
@@ -198,7 +199,7 @@ interface AlertDao {
 @Database(
     entities = [CandleEntity::class, AnalysisEntity::class, ZoneEntity::class, JournalEntity::class,
         BacktestEntity::class, SettingEntity::class, AlertRuleEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class GoldLensDatabase : RoomDatabase() {
@@ -216,11 +217,16 @@ abstract class GoldLensDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE market_candles ADD COLUMN source_label TEXT NOT NULL DEFAULT 'Imported CSV'")
             }
         }
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE market_candles ADD COLUMN source_precision INTEGER")
+            }
+        }
 
         @Volatile private var instance: GoldLensDatabase? = null
         fun get(context: Context): GoldLensDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, GoldLensDatabase::class.java, "goldlens-local.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }
@@ -237,9 +243,10 @@ suspend fun GoldLensDatabase.replaceCandleSet(
     symbol: String = "XAU/USD",
     source: DataSourceKind = DataSourceKind.IMPORTED_CSV,
     sourceLabel: String = "Imported CSV",
+    sourcePrecision: Int? = null,
 ) = withTransaction {
     candleDao().delete(symbol, timeframe)
-    candleDao().upsertAll(candles.map { it.toEntity(timeframe, symbol, source, sourceLabel) })
+    candleDao().upsertAll(candles.map { it.toEntity(timeframe, symbol, source, sourceLabel, sourcePrecision) })
 }
 
 fun CandleEntity.toCandle() = Candle(timestampMillis, open, high, low, close, volume)
@@ -250,10 +257,11 @@ private fun Candle.toEntity(
     symbol: String = "XAU/USD",
     source: DataSourceKind = DataSourceKind.IMPORTED_CSV,
     sourceLabel: String = "Imported CSV",
+    sourcePrecision: Int? = null,
 ) = CandleEntity(
     symbol = symbol, timeframe = timeframe, timestampMillis = timestampMillis,
     open = open, high = high, low = low, close = close, volume = volume,
-    source = source.name, sourceLabel = sourceLabel,
+    source = source.name, sourceLabel = sourceLabel, sourcePrecision = sourcePrecision,
 )
 
 fun AnalysisResult.toEntity() = AnalysisEntity(

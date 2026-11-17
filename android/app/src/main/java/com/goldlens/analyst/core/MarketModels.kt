@@ -30,7 +30,10 @@ data class MarketDataset(
     val timeframe: String,
     val loadedAtMillis: Long,
     val instrument: String = "XAU/USD",
+    /** Decimal precision reported/inferred from the source; null uses instrument defaults. */
+    val sourcePrecision: Int? = null,
 ) {
+    init { require(sourcePrecision == null || sourcePrecision in 0..8) }
     fun normalized(): MarketDataset = copy(candles = normalizeCandles(candles))
 }
 

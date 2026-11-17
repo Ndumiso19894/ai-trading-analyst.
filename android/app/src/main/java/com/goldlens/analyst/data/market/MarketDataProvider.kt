@@ -4,6 +4,7 @@ import com.goldlens.analyst.core.Candle
 import com.goldlens.analyst.core.aggregateCandles
 import com.goldlens.analyst.core.completeCandlesAt
 import com.goldlens.analyst.core.DataSourceKind
+import com.goldlens.analyst.core.InstrumentPrice
 import com.goldlens.analyst.core.normalizeCandles
 import org.json.JSONException
 import org.json.JSONObject
@@ -25,6 +26,7 @@ data class ProviderMarketSnapshot(
     val source: DataSourceKind,
     val sourceLabel: String,
     val fetchedAtMillis: Long,
+    val sourcePrecision: Int? = null,
     val providerReferencePrice: Double?,
     val providerPriceTimestampMillis: Long?,
     val bid: Double? = null,
@@ -83,12 +85,15 @@ class YahooFinanceChartProvider(
         }
         if (candles.isEmpty()) throw MarketDataException("Provider returned no valid OHLC candles for $instrument.")
         val normalized = normalizeCandles(candles)
+        val meta = result.optJSONObject("meta") ?: JSONObject()
+        val metaPrecision = meta.optInt("priceHint", -1).takeIf { it in 0..8 }
+        val observedPrecision = InstrumentPrice.inferPrecision(normalized.flatMap { listOf(it.open, it.high, it.low, it.close) })
+        val sourcePrecision = listOfNotNull(metaPrecision, observedPrecision).maxOrNull()
         val fetchedAtMillis = clockMillis()
         val sourceTimeframe = if (timeframe == "4h") "1h" else timeframe
         val closedSourceCandles = completeCandlesAt(normalized, sourceTimeframe, fetchedAtMillis)
         val requestedCandles = if (timeframe == "4h") aggregateCandles(closedSourceCandles, "1h", "4h") else closedSourceCandles
         if (requestedCandles.isEmpty()) throw MarketDataException("Provider supplied no complete, closed $timeframe candles for $instrument.")
-        val meta = result.optJSONObject("meta") ?: JSONObject()
         val referencePrice = meta.finiteDouble("regularMarketPrice")
         val referenceTimestamp = meta.optLong("regularMarketTime", -1L).takeIf { it > 0 }?.times(1_000L)
         return ProviderMarketSnapshot(
@@ -98,6 +103,7 @@ class YahooFinanceChartProvider(
             source = DataSourceKind.HISTORICAL,
             sourceLabel = "Historical chart archive · $displayName · ${meta.optString("symbol", ticker)}",
             fetchedAtMillis = fetchedAtMillis,
+            sourcePrecision = sourcePrecision,
             providerReferencePrice = referencePrice,
             providerPriceTimestampMillis = referenceTimestamp,
             bid = meta.finiteDouble("bid"),

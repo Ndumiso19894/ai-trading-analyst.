@@ -97,6 +97,36 @@ not-a-time,1,2,0.5,1.5,3
         assertEquals("partial", result.agreement)
     }
 
+    @Test fun instrumentPriceFormattingUsesPairAndSourcePrecisionWithoutChangingPrices() {
+        assertEquals("1.23457", InstrumentPrice.format(1.234567, "EUR/USD"))
+        assertEquals("1.23456", InstrumentPrice.format(1.23456, "GBP/USD"))
+        assertEquals("150.123", InstrumentPrice.format(150.12345, "USD/JPY"))
+        assertEquals("18.12346", InstrumentPrice.format(18.123456, "USD/ZAR"))
+        assertEquals("2345.68", InstrumentPrice.format(2345.678, "XAU/USD"))
+        assertEquals("31.123", InstrumentPrice.format(31.123456, "XAG/USD"))
+        assertEquals("31.2", InstrumentPrice.format(31.2, "XAG/USD", sourcePrecision = 1))
+        assertEquals(1.234567, 1.234567, 0.0) // Display formatting is separate; callers retain the unrounded value.
+    }
+
+    @Test fun instrumentPipDistancesUseForexPipsAndExplicitMetalPoints() {
+        assertEquals(5.0, InstrumentPrice.pipDistance("EUR/USD", 1.1000, 1.1005)!!, 1e-9)
+        assertEquals(15.0, InstrumentPrice.pipDistance("GBP/USD", 1.2700, 1.2685)!!, 1e-9)
+        assertEquals(50.0, InstrumentPrice.pipDistance("USD/JPY", 150.00, 149.50)!!, 1e-9)
+        assertEquals(1_000.0, InstrumentPrice.pipDistance("USD/ZAR", 18.5000, 18.4000)!!, 1e-9)
+        assertNull(InstrumentPrice.pipDistance("XAU/USD", 2_330.0, 2_329.0))
+        assertNull(InstrumentPrice.pointDistance("XAU/USD", 2_330.10, 2_329.50))
+        assertEquals(60.0, InstrumentPrice.pointDistance("XAU/USD", 2_330.10, 2_329.50, 0.01)!!, 1e-8)
+        assertEquals(123.0, InstrumentPrice.pointDistance("XAG/USD", 30.123, 30.000, 0.001)!!, 1e-8)
+        assertEquals("+0.00010 (1 pips)", InstrumentPrice.movement("EUR/USD", 1.1000, 1.1001, 5))
+    }
+
+    @Test fun csvImportRetainsSourceDecimalPrecisionWithoutRoundingCandles() {
+        val csv = "timestamp,open,high,low,close,volume\n2025-01-01T00:00:00Z,1.2345,1.2356,1.2334,1.23456,10\n"
+        val parsed = CsvCandleParser.parse(csv)
+        assertEquals(5, parsed.sourcePrecision)
+        assertEquals(1.23456, parsed.candles.single().close, 0.0)
+    }
+
     @Test fun localCsvReportExportQuotesMultilineJournalNotesAndUsesUtc() {
         val row = JournalEntity(
             openedAtMillis = 1_735_689_600_000L, symbol = "EUR/USD", direction = "BUY", timeframe = "1h",
