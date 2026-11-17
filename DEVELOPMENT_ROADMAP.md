@@ -38,7 +38,7 @@ field-verified behavior.
 - [x] Kotlin/Compose API client, health check, configurable/persisted advanced endpoint,
   analysis/market/history/screenshot actions
 - [x] Release networking is HTTPS-only; debug build permits HTTP for local testing
-- [x] CI built v0.3.0 APKs with JDK 17, Android API 35, Build Tools 35 and Gradle 8.9; current artifact run `44069079549`
+- [x] CI built v0.3.0 APKs with JDK 17, Android API 35, Build Tools 35 and Gradle 8.9; current artifact run `44070173197`
 - [x] Default HTTPS host embedded in app and advanced saved override
 - [ ] Owner-signed release APK (requires owner-managed key secrets)
 - [ ] Physical/emulator interaction and test against deployed HTTPS API

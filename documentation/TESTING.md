@@ -18,7 +18,7 @@
 - Android local toolchain: `java`, `gradle`, `kotlinc`, `ANDROID_HOME`, and
   `ANDROID_SDK_ROOT` are absent. Debian package mirrors, GitHub release-asset redirects, and
   Google SDK downloads were blocked from this sandbox.
-- Android remote build: GitHub Actions run `44069079549` passed on commit `ca851e2`; JDK 17,
+- Android remote build: GitHub Actions run `44070173197` passed on commit `f379767`; JDK 17,
   Android API 35 / Build Tools 35.0.0, Gradle 8.9, `testDebugUnitTest`, `assembleDebug`,
   `assembleRelease`, and artifact upload all succeeded. APK artifact `goldlens-android-apks`
   (15,138,497 bytes, 30-day retention) embeds the expected Render Blueprint host. The
