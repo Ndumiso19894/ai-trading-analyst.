@@ -3,12 +3,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.api.routes import router as api_router
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Free-first AI-assisted trading analysis platform (XAU/USD first).",
 )
+
+app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
