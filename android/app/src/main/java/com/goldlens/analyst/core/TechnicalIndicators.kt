@@ -23,8 +23,8 @@ object TechnicalIndicators {
         val changes = close.indices.map { i -> if (i == 0) null else close[i] - close[i - 1] }
         val gains = changes.map { it?.coerceAtLeast(0.0) }
         val losses = changes.map { it?.let { value -> (-value).coerceAtLeast(0.0) } }
-        val avgGain = ewmNullable(gains, 14)
-        val avgLoss = ewmNullable(losses, 14)
+        val avgGain = ewmNullable(gains, 14, smoothingAlpha = 1.0 / 14.0)
+        val avgLoss = ewmNullable(losses, 14, smoothingAlpha = 1.0 / 14.0)
         val rsi = close.indices.map { i ->
             val gain = avgGain[i]
             val loss = avgLoss[i]
@@ -55,7 +55,7 @@ object TechnicalIndicators {
             if (i == 0) high[i] - low[i]
             else max(high[i] - low[i], max(kotlin.math.abs(high[i] - close[i - 1]), kotlin.math.abs(low[i] - close[i - 1])))
         }
-        val atr = ewmNullable(trueRange.map { it }, 14)
+        val atr = ewmNullable(trueRange.map { it }, 14, smoothingAlpha = 1.0 / 14.0)
 
         val bbMiddle = rollingMean(close.map { it }, 20)
         val bbStd = rollingPopulationStd(close, 20)
@@ -92,9 +92,14 @@ object TechnicalIndicators {
 
     private fun ema(values: List<Double>, period: Int): List<Double?> = ewmNullable(values.map { it }, period)
 
-    private fun ewmNullable(values: List<Double?>, period: Int): List<Double?> {
+    private fun ewmNullable(
+        values: List<Double?>,
+        period: Int,
+        smoothingAlpha: Double = 2.0 / (period + 1.0),
+    ): List<Double?> {
         require(period > 0)
-        val alpha = 2.0 / (period + 1.0)
+        require(smoothingAlpha > 0.0 && smoothingAlpha <= 1.0)
+        val alpha = smoothingAlpha
         var current: Double? = null
         var observed = 0
         return values.map { value ->

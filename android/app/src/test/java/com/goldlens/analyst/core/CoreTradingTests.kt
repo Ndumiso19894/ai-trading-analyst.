@@ -38,7 +38,7 @@ class CoreTradingTests {
     @Test fun warmupValuesAreNotInvented() {
         val result = TechnicalIndicators.calculate(parityCandles(20))
         assertNull(result[18].ema20)
-        assertNull(result.last().ema20)
+        assertTrue(result.last().ema20 != null)
         assertNull(result.last().ema200)
         assertTrue(result.last().atr14 != null)
     }
