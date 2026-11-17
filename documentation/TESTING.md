@@ -6,9 +6,13 @@
 - Android CI run `44123829333` passed on commit `2b9d3cd909572a197c4a99dce10dfc6ed5a9a5fe`: Gradle `testDebugUnitTest`, `assembleDebug` and `assembleRelease`; APK artifacts were uploaded. This run predates the current instrument selector/export/icon changes.
 - Android manifests and workflow YAML parsed; `git diff --check` passed on the previous checkpoint.
 
-## Current changes requiring verification
+## Current checkpoint verification
 
-Current uncommitted work adds adaptive/legacy launcher resources, an instrument registry and selection persistence, symbol-aware Room candle imports, UTC CSV export, and broker specification validation changes. Do not treat these as tested until a fresh Android CI run passes on the resulting commit.
+- Android CI run `44134843661` passed on commit `002243dc760d81992f4124ef5b3a0be5b0759451`: `testDebugUnitTest`, `assembleDebug`, and `assembleRelease` succeeded; `goldlens-android-apks` and test-report artifacts were uploaded.
+- This run verifies the adaptive/legacy icon resources, instrument registry/selection persistence, symbol-aware Room candle import, UTC CSV export and broker-spec validation compile and pass the current Kotlin unit tests.
+- Python backend tests rerun in this iteration: `22 passed, 1 warning`.
+- Frontend production build rerun in this iteration: `tsc -b && vite build` succeeded (Vite 6.4.6).
+- Android manifest/resources XML, workflow YAML, generated PNG decoding and `git diff --check` passed.
 
 ## Verification limits
 

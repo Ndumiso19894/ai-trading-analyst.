@@ -5,7 +5,7 @@
 - Candle persistence and analysis now retain the selected symbol; switching instrument/timeframe reloads only its saved local data rather than relabeling another dataset.
 - Added normalized UTC OHLCV CSV export and round-trip/catalog/risk tests.
 - Added the generated GoldLens launcher mark as adaptive and legacy Android icons.
-- Updated documentation to distinguish Android offline features, optional backend capabilities, and remaining capture/cloud/backtest work. This is a development checkpoint; current-head CI verification is pending.
+- Updated documentation to distinguish Android offline features, optional backend capabilities, and remaining capture/cloud/backtest work. Android unit tests and debug/release packaging passed in CI run 44134843661 on commit 002243d.
 
 ## [0.3.3] — Enzonic Deploy FastAPI discovery fix (2026-11-17)
 - Added `backend/main.py`, a top-level re-export of the existing `app.main:app`, because Enzica's

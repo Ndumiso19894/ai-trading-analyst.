@@ -37,8 +37,9 @@ The repository still contains the FastAPI backend, React/TypeScript dashboard, K
 
 ## Verification record
 
-- Android GitHub Actions run `44123829333` passed on commit `2b9d3cd909572a197c4a99dce10dfc6ed5a9a5fe`: `testDebugUnitTest`, `assembleDebug` and `assembleRelease`, and uploaded debug/release APK artifacts. That build predates the current instrument/export/icon edits; those changes must receive a fresh CI run before claiming current-head build success.
-- Backend pytest previously passed: 22 tests, 1 warning (recorded 2026-11-17). Rerun after backend changes.
+- Android GitHub Actions run `44134843661` passed on commit `002243dc760d81992f4124ef5b3a0be5b0759451`: `testDebugUnitTest`, `assembleDebug` and `assembleRelease`, with debug/release APK artifacts uploaded. This verifies the current icon, registry, selector, symbol-aware import and CSV export source.
+- Backend pytest rerun 2026-11-17: 22 passed, 1 warning.
+- Frontend production build rerun 2026-11-17: `tsc -b && vite build` succeeded.
 - No physical-device or emulator verification has been performed.
 
 ## Next development steps
