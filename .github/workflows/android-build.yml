@@ -94,11 +94,18 @@ jobs:
           gradle --no-daemon --stacktrace -PbackendBaseUrl="$BACKEND_URL" testDebugUnitTest assembleDebug assembleRelease > "$RUNNER_TEMP/android-gradle.log" 2>&1
           result=$?
           if [[ $result -ne 0 ]]; then
-            grep -R -H '<failure' app/build/test-results/testDebugUnitTest >> "$RUNNER_TEMP/android-gradle.log" || true
+            python3 - <<'PY' >> "$RUNNER_TEMP/android-gradle.log"
+          import glob, xml.etree.ElementTree as ET
+          for path in glob.glob('app/build/test-results/testDebugUnitTest/TEST-*.xml'):
+              for case in ET.parse(path).getroot().iter('testcase'):
+                  failure = case.find('failure')
+                  if failure is not None:
+                      print(f"FAILED TEST {case.get('name')}: {(failure.get('message') or '')[:1000]} {(failure.text or '')[:2000]}")
+          PY
           fi
           tail -n 120 "$RUNNER_TEMP/android-gradle.log"
           if [[ $result -ne 0 ]]; then
-            details=$(grep -E '(^e: |error:|What went wrong:|Execution failed|Could not |Failed to |^> |^\* Exception is:)' "$RUNNER_TEMP/android-gradle.log" | tail -n 35 | tr '\n' ' ' | cut -c1-5000)
+            details=$(grep -E '(FAILED TEST|^e: |error:|What went wrong:|Execution failed|Could not |Failed to |^> |^\* Exception is:)' "$RUNNER_TEMP/android-gradle.log" | tail -n 35 | tr '\n' ' ' | cut -c1-5000)
             echo "::error title=Android Gradle failure::$details"
           fi
           exit $result
