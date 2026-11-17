@@ -9,7 +9,7 @@ GoldLens is the existing Android-first analysis project with a native Kotlin/Com
 ### Android
 
 - Offline Kotlin indicators, market-structure summary, pivot-cluster support/resistance and explainable BUY/SELL/WAIT over user-imported OHLC.
-- Room persistence for local candle sets, saved analyses/zones, manual journal and settings.
+- Room persistence for local candle sets, saved analyses/zones, manual journal, backtest reports and settings; exports for analyses, zones, journal and backtests through Android's document picker.
 - CSV import from Android's document picker and CSV export of the selected candle set. Import currently loads after validation; it does not offer a preview.
 - Instrument selector/catalog covering EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, NZD/USD, USD/CAD, EUR/GBP, EUR/JPY, GBP/JPY, USD/ZAR, XAU/USD, XAG/USD and XPT/USD. Broker contract/tick/volume details remain unset until verified and entered.
 - Offline risk calculator for long and short positions, requiring user-supplied broker contract size or tick specifications; account currency conversion is not implemented.
@@ -32,7 +32,6 @@ GoldLens is the existing Android-first analysis project with a native Kotlin/Com
 - Android MediaProjection capture, crop/preview, genuine screenshot chart recognition, and desktop MT5 bridge.
 - Android WorkManager alerts, Google Drive OAuth/backup, GitHub data snapshots and unified sync manager.
 - Multi-timeframe analysis from separate independent datasets; current aggregation is limited to complete bars from one selected source series.
-- CSV preview and export of journals/signals/backtests/zones.
 - Physical-device or emulator acceptance testing. GitHub CI verifies unit tests, compilation and APK packaging only.
 
 ## Run locally
@@ -67,7 +66,7 @@ cd ../frontend && npm ci && npm run build
 cd ../android && gradle testDebugUnitTest assembleDebug assembleRelease
 ```
 
-Debug APK output: `android/app/build/outputs/apk/debug/app-debug.apk`. Android CI also uploads debug and release APK artifacts from successful runs. Without owner-provided release signing secrets, release APK is unsigned; the debug APK is straightforward to sideload but cannot update an existing installation signed by a different certificate. Upgrade compatibility with the old app has not been verified; the installed app's signer and owner keystore must match.
+Debug APK output: `android/app/build/outputs/apk/debug/app-debug.apk`. Android CI also uploads debug and release APK artifacts from successful runs, plus `android-apk-signing-report.txt` with APK hashes and signing-certificate fingerprints. Without owner-provided release signing secrets, release APK is unsigned; the debug APK is straightforward to sideload but cannot update an existing installation signed by a different certificate. Upgrade compatibility with the old app has not been verified. To check, obtain the old APK (for a connected device, run `adb shell pm path com.goldlens.analyst`, then `adb pull <returned-base.apk-path> old.apk`) and run `$ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs old.apk`; compare its SHA-256 certificate fingerprint with the CI report. If they differ, configure the original owner-controlled keystore in GitHub Actions secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) and rebuild. Never paste or commit keystore bytes/passwords. If the original key is irretrievably lost, Android will not permit an in-place update under the same application ID; export user data, uninstall the old app, then install the new one.
 
 ## Data integrity notes
 

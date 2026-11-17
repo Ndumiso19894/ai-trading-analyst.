@@ -109,6 +109,32 @@ jobs:
             echo "::error title=Android Gradle failure::$details"
           fi
           exit $result
+      - name: Report APK checksums and signing certificates
+        if: steps.gradle-build.outcome == 'success'
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          report="$GITHUB_WORKSPACE/android-apk-signing-report.txt"
+          : > "$report"
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/debug/*.apk app/build/outputs/apk/release/*.apk)
+          if [[ ${#apks[@]} -eq 0 ]]; then echo "No APK files found" | tee "$report"; exit 1; fi
+          for apk in "${apks[@]}"; do
+            echo "APK: $apk" | tee -a "$report"
+            sha256sum "$apk" | tee -a "$report"
+            if "$signer" verify --print-certs "$apk" > "$RUNNER_TEMP/apksigner.txt" 2>&1; then
+              if ! grep -E 'Signer #1 certificate SHA-256 digest|Signer #1 certificate DN' "$RUNNER_TEMP/apksigner.txt" | tee -a "$report"; then
+                echo "Signature verified; certificate details were not emitted by this apksigner." | tee -a "$report"
+              fi
+            else
+              echo "Signature: unsigned or verification failed" | tee -a "$report"
+              cat "$RUNNER_TEMP/apksigner.txt" | tail -n 4 | tee -a "$report"
+            fi
+            echo | tee -a "$report"
+          done
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Android test reports for diagnosis
         if: always()
         uses: actions/upload-artifact@v4
@@ -126,3 +152,4 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/release/app-release*.apk
+            android-apk-signing-report.txt

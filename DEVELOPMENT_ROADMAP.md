@@ -11,7 +11,7 @@ The repository still contains the FastAPI backend, React/TypeScript dashboard, K
 - Kotlin indicators and an explainable BUY/SELL/WAIT engine; confirmed-pivot support/resistance on the supplied timeframe.
 - Room storage for candle sets with source provenance, analyses/zones, journal entries, settings, backtest records and alert-rule records. Schema v2 includes a v1-to-v2 candle-provenance migration; migration is compile-tested in CI, but has not been exercised on a device database.
 - CSV OHLC import through Android's document picker. Parser accepts common timestamp/date formats and case-insensitive OHLC column names, validates rows, orders UTC timestamps and de-duplicates timestamps. Import is applied immediately; there is no preview or configurable decimal-comma/timezone mode.
-- CSV export of the selected local candle set through Android's document picker.
+- CSV export of the selected local candle set and stored analyses, support/resistance zones, journal and backtest runs through Android's document picker.
 - Instrument registry and selector for 11 requested FX pairs plus XAU/USD, XAG/USD and XPT/USD. Display precision is a suggestion. Broker aliases are templates; tick values, contracts, volume limits and sessions are deliberately unset until verified for the user's broker.
 - Offline risk calculation supports long and short positions with a user-entered contract multiplier or tick-size/tick-value pair. Account-currency conversion is not implemented.
 - User-started floating overlay service with overlay permission flow, foreground notification, drag/expand/collapse/stop, local saved-candle analysis, source provenance and instrument/timeframe labels.
@@ -28,7 +28,7 @@ The repository still contains the FastAPI backend, React/TypeScript dashboard, K
 - No WorkManager alert scheduler, notification rules UI or dependable background monitoring. Room has an alert-rule table only.
 - No Google Drive OAuth/backup, GitHub data snapshots or unified sync manager. Local Room data is not deleted by any sync process because no sync process exists.
 - No three-mode Independent/MT5/Compare selector, no validated structured MT5 bridge, and no genuine broker bid/ask/spread feed. Multi-timeframe Android analysis currently aggregates one selected candle series; it does not merge independent feeds or use separate provider endpoints per timeframe.
-- No user CSV import preview or export of signals/journal/backtests/zones yet.
+- No user CSV import preview yet. Analysis, zones, journal and backtest records now have document-picker CSV export.
 - The overlay, permission flow, Room persistence, and icon rendering need emulator/physical-device acceptance checks. CI verifies compile/unit tests/APK packaging only.
 
 ## Web/backend

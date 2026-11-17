@@ -53,6 +53,7 @@ import com.goldlens.analyst.core.ZoneSide
 import com.goldlens.analyst.core.TradeSide
 import com.goldlens.analyst.core.ZoneStatus
 import com.goldlens.analyst.data.BacktestEntity
+import com.goldlens.analyst.data.CsvReportExporter
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.market.MarketDataException
 import com.goldlens.analyst.data.market.ProviderMarketSnapshot
@@ -118,6 +119,7 @@ private fun GoldLensScreen(context: Context) {
     var timeframe by remember { mutableStateOf("1h") }
     var instrument by remember { mutableStateOf("XAU/USD") }
     var isBusy by remember { mutableStateOf(false) }
+    var exportTable by remember { mutableStateOf("journal") }
     var error by remember { mutableStateOf("") }
     var riskBalance by remember { mutableStateOf("") }
     var riskPercent by remember { mutableStateOf("1.0") }
@@ -177,6 +179,40 @@ private fun GoldLensScreen(context: Context) {
 
     val screenshotPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) request("/api/screenshot/analyze", uri)
+    }
+    val reportExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) scope.launch {
+            isBusy = true
+            try {
+                val exported = withContext(Dispatchers.IO) {
+                    when (exportTable) {
+                        "analyses" -> {
+                            val rows = database.analysisDao().history(10_000)
+                            CsvReportExporter.analyses(rows) to rows.size
+                        }
+                        "zones" -> {
+                            val rows = database.analysisDao().history(10_000)
+                            val joined = rows.map { it to database.analysisDao().zones(it.id) }
+                            CsvReportExporter.zones(joined) to joined.sumOf { it.second.size }
+                        }
+                        "backtests" -> {
+                            val rows = database.backtestDao().history(10_000)
+                            CsvReportExporter.backtests(rows) to rows.size
+                        }
+                        else -> {
+                            val rows = database.journalDao().history(10_000)
+                            CsvReportExporter.journal(rows) to rows.size
+                        }
+                    }
+                }
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(exported.first) }
+                        ?: throw IllegalArgumentException("Could not write the selected CSV destination.")
+                }
+                error = "Exported ${exported.second} $exportTable records."
+            } catch (e: Exception) { error = e.message ?: "CSV export failed." }
+            finally { isBusy = false }
+        }
     }
     val csvExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         val candlesToExport = dataset?.candles.orEmpty()
@@ -351,7 +387,7 @@ private fun GoldLensScreen(context: Context) {
             withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("instrument", instrument)) }
         }
     }
-    val tabs = listOf("Overview", "Analysis", "S/R Zones", "Backtest", "Risk", "Journal", "Settings")
+    val tabs = listOf("Overview", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Gold, onPrimary = Color(0xFF17130A), secondary = Green,
@@ -400,12 +436,16 @@ private fun GoldLensScreen(context: Context) {
                                 }
                             },
                             onExport = { csvExportPicker.launch("goldlens-${instrument.replace('/', '-')}-${timeframe}.csv") },
-                            onAnalyze = ::analyzeOffline, onRisk = { tab = 4 })
+                            onAnalyze = ::analyzeOffline, onRisk = { tab = 5 })
                         1 -> AnalysisTab(analysis, dataset, isBusy, multiTimeframe, ::analyzeOffline)
                         2 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price)
                         3 -> BacktestTab(dataset, backtestReport, isBusy, ::runBacktest)
-                        4 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk)
-                        5 -> JournalTab(database, timeframe, instrument)
+                        4 -> ExportsTab(isBusy) { table ->
+                            exportTable = table
+                            reportExportPicker.launch("goldlens-$table.csv")
+                        }
+                        5 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk)
+                        6 -> JournalTab(database, timeframe, instrument)
                         else -> SettingsTab(backendUrl, { backendUrl = it; prefs.edit().putString("backend_url", it).apply(); scope.launch(Dispatchers.IO) { database.settingDao().put(SettingEntity("backend_url", it)) } }, backendState, backendResponse, isBusy, overlayAllowed, overlayRunning, ::enableOverlay, ::disableOverlay, { request("/health") }, { request("/api/market/candles?timeframe=$timeframe&period=5d") }, { request("/api/analysis?timeframe=$timeframe&period=3mo") }, { request("/api/signals") }, { screenshotPicker.launch("image/*") })
                     }
                 }
@@ -538,6 +578,19 @@ private fun ZonesTab(zones: List<PriceZone>, candles: List<Candle>, price: Doubl
                 }
             }
         }
+}
+
+@Composable
+private fun ExportsTab(busy: Boolean, onExport: (String) -> Unit) {
+    InfoCard("Export locally stored records as CSV through Android's document picker. Exports stay on your device unless you choose a destination.", Gold)
+    listOf(
+        "analyses" to "Export analysis signals",
+        "zones" to "Export support/resistance zones",
+        "journal" to "Export trade journal",
+        "backtests" to "Export backtest runs",
+    ).forEach { (table, label) ->
+        OutlinedButton(onClick = { onExport(table) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(label) }
+    }
 }
 
 @Composable

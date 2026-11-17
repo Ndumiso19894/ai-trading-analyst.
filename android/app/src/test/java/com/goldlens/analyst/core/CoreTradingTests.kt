@@ -1,5 +1,7 @@
 package com.goldlens.analyst.core
 
+import com.goldlens.analyst.data.CsvReportExporter
+import com.goldlens.analyst.data.JournalEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -90,6 +92,17 @@ not-a-time,1,2,0.5,1.5,3
         assertEquals(0, result.assessments.first { it.timeframe == "5m" }.candleCount)
         assertTrue(result.assessments.first { it.timeframe == "4h" }.candleCount > 0)
         assertEquals("partial", result.agreement)
+    }
+
+    @Test fun localCsvReportExportQuotesMultilineJournalNotesAndUsesUtc() {
+        val row = JournalEntity(
+            openedAtMillis = 1_735_689_600_000L, symbol = "EUR/USD", direction = "BUY", timeframe = "1h",
+            entry = 1.25, stopLoss = 1.20, takeProfit = 1.35, notes = "review, \"slow\"\nsecond line",
+        )
+        val csv = CsvReportExporter.journal(listOf(row))
+        assertTrue(csv.startsWith("opened_at_utc,closed_at_utc,instrument"))
+        assertTrue(csv.contains("2025-01-01T00:00:00Z"))
+        assertTrue(csv.contains("\"review, \"\"slow\"\"\nsecond line\""))
     }
 
     @Test fun localBacktestReportsChronologicalSegmentsAndExplicitCostAssumptions() {
