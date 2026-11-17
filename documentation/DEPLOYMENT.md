@@ -45,13 +45,15 @@ release manifest disallows cleartext HTTP. Android's debug manifest allows clear
 development; the app default uses HTTPS. API CORS is wildcard and credential-free; native
 Android networking itself is not subject to browser CORS.
 
-## Build an APK with the actual URL
+## Build and smoke-test an APK with the actual URL
 
 The Android Gradle build defaults to the Blueprint's intended host, but the host is **not yet
-verified**. After deployment, if Render shows a different hostname, trigger GitHub Actions →
-Android build → **Run workflow** and pass the actual API root in `backend_url`. The workflow
-requires HTTPS and embeds the URL in the APK. You can instead enter a custom HTTPS endpoint in
-the app's Advanced connection settings (it is saved on-device).
+verified**. After deployment, open GitHub Actions → Android build → **Run workflow** and pass
+the actual API root in `backend_url` (even if it matches the default). A manual run first
+smoke-tests health, provider metadata, market candles, gold analysis, signal history, risk,
+screenshot upload and CORS, then embeds that HTTPS URL in the APK. Market candles/analysis
+checks fail if the upstream Yahoo provider returns an error. You can instead enter a custom
+HTTPS endpoint in the app's Advanced connection settings (it is saved on-device).
 
 Build artifacts are available on the workflow run page for 30 days. The debug APK is signed
 for testing; a production release APK requires owner-managed signing secrets as described in

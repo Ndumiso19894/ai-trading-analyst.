@@ -47,6 +47,11 @@ jobs:
           command -v sdkmanager || true
       - name: Install Android API 35 build tools
         run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Smoke-test public HTTPS API before building phone APK
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          BACKEND_URL: ${{ github.event.inputs.backend_url || 'https://goldlens-xau-api-ndumiso19894.onrender.com' }}
+        run: python3 scripts/smoke_live_api.py
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
