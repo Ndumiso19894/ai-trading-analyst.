@@ -16,8 +16,8 @@ android {
         applicationId = "com.goldlens.analyst"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.4.0"
+        versionCode = 4
+        versionName = "0.5.0"
         buildConfigField("String", "DEFAULT_BACKEND_URL", "\"$configuredBackendUrl\"")
     }
     compileOptions {
@@ -41,6 +41,11 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            // Use the owner-controlled release certificate when configured so debug installs can update
+            // an owner-signed release package; otherwise Gradle uses its standard debug key.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         getByName("release") {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")

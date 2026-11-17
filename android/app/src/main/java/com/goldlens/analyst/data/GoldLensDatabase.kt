@@ -13,9 +13,12 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.withTransaction
 import com.goldlens.analyst.core.AnalysisResult
 import com.goldlens.analyst.core.Candle
+import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.PriceZone
 
 @Entity(tableName = "market_candles", primaryKeys = ["symbol", "timeframe", "timestamp_millis"], indices = [Index(value = ["timeframe", "timestamp_millis"])])
@@ -28,6 +31,8 @@ data class CandleEntity(
     val low: Double,
     val close: Double,
     val volume: Double,
+    @ColumnInfo(defaultValue = "'IMPORTED_CSV'") val source: String = "IMPORTED_CSV",
+    @ColumnInfo(name = "source_label", defaultValue = "'Imported CSV'") val sourceLabel: String = "Imported CSV",
 )
 
 @Entity(tableName = "analysis_records", indices = [Index(value = ["timestamp_millis"])])
@@ -193,7 +198,7 @@ interface AlertDao {
 @Database(
     entities = [CandleEntity::class, AnalysisEntity::class, ZoneEntity::class, JournalEntity::class,
         BacktestEntity::class, SettingEntity::class, AlertRuleEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class GoldLensDatabase : RoomDatabase() {
@@ -205,9 +210,17 @@ abstract class GoldLensDatabase : RoomDatabase() {
     abstract fun alertDao(): AlertDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE market_candles ADD COLUMN source TEXT NOT NULL DEFAULT 'IMPORTED_CSV'")
+                database.execSQL("ALTER TABLE market_candles ADD COLUMN source_label TEXT NOT NULL DEFAULT 'Imported CSV'")
+            }
+        }
+
         @Volatile private var instance: GoldLensDatabase? = null
         fun get(context: Context): GoldLensDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, GoldLensDatabase::class.java, "goldlens-local.db")
+                .addMigrations(MIGRATION_1_2)
                 .build().also { instance = it }
         }
     }
@@ -218,16 +231,29 @@ suspend fun GoldLensDatabase.saveAnalysis(result: AnalysisEntity, zones: List<Zo
     analysisDao().insertZones(zones.map { it.copy(analysisId = id) })
 }
 
-suspend fun GoldLensDatabase.replaceCandleSet(timeframe: String, candles: List<Candle>, symbol: String = "XAU/USD") = withTransaction {
+suspend fun GoldLensDatabase.replaceCandleSet(
+    timeframe: String,
+    candles: List<Candle>,
+    symbol: String = "XAU/USD",
+    source: DataSourceKind = DataSourceKind.IMPORTED_CSV,
+    sourceLabel: String = "Imported CSV",
+) = withTransaction {
     candleDao().delete(symbol, timeframe)
-    candleDao().upsertAll(candles.map { it.toEntity(timeframe, symbol) })
+    candleDao().upsertAll(candles.map { it.toEntity(timeframe, symbol, source, sourceLabel) })
 }
 
 fun CandleEntity.toCandle() = Candle(timestampMillis, open, high, low, close, volume)
+fun CandleEntity.toDataSourceKind() = runCatching { DataSourceKind.valueOf(source) }.getOrDefault(DataSourceKind.IMPORTED_CSV)
 
-private fun Candle.toEntity(timeframe: String, symbol: String = "XAU/USD") = CandleEntity(
+private fun Candle.toEntity(
+    timeframe: String,
+    symbol: String = "XAU/USD",
+    source: DataSourceKind = DataSourceKind.IMPORTED_CSV,
+    sourceLabel: String = "Imported CSV",
+) = CandleEntity(
     symbol = symbol, timeframe = timeframe, timestampMillis = timestampMillis,
     open = open, high = high, low = low, close = close, volume = volume,
+    source = source.name, sourceLabel = sourceLabel,
 )
 
 fun AnalysisResult.toEntity() = AnalysisEntity(

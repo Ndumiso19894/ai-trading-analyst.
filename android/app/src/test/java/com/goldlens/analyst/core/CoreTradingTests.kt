@@ -66,6 +66,69 @@ not-a-time,1,2,0.5,1.5,3
         assertClose(1000.0, parsed.candles.first().volume)
     }
 
+    @Test fun timeframeAggregationUsesOnlyCompleteUtcAlignedBars() {
+        val base = (0 until 8).map { i ->
+            Candle(1_735_689_600_000L + i * 3_600_000L, 100.0 + i, 102.0 + i, 99.0 + i, 101.0 + i, 2.0)
+        }
+        val fourHour = aggregateCandles(base, "1h", "4h")
+        assertEquals(2, fourHour.size)
+        assertEquals(base[0].timestampMillis, fourHour[0].timestampMillis)
+        assertClose(base[0].open, fourHour[0].open)
+        assertClose(base[3].close, fourHour[0].close)
+        assertClose(base.take(4).sumOf(Candle::volume), fourHour[0].volume)
+        assertTrue(aggregateCandles(base, "1h", "15m").isEmpty())
+        assertEquals(1, aggregateCandles(base.filterIndexed { index, _ -> index != 2 }, "1h", "4h").size)
+    }
+
+    @Test fun multiTimeframeAnalysisReportsMissingSourceFramesInsteadOfInventingBars() {
+        val hourly = (0 until 16).map { i ->
+            val c = 2_000.0 + i
+            Candle(1_735_689_600_000L + i * 3_600_000L, c, c + 1, c - 1, c + 0.5, 1.0)
+        }
+        val result = MultiTimeframeAnalyzer.analyze(MarketDataset(hourly, DataSourceKind.IMPORTED_CSV, "csv", "1h", 1L, "EUR/USD"))
+        assertEquals("EUR/USD", result.instrument)
+        assertEquals(0, result.assessments.first { it.timeframe == "5m" }.candleCount)
+        assertTrue(result.assessments.first { it.timeframe == "4h" }.candleCount > 0)
+        assertEquals("partial", result.agreement)
+    }
+
+    @Test fun localBacktestReportsChronologicalSegmentsAndExplicitCostAssumptions() {
+        val oscillating = (0 until 600).map { i ->
+            val close = 2_000.0 + 0.03 * i + 15.0 * sin(i * 0.15)
+            Candle(1_735_689_600_000L + i * 3_600_000L, close, close + 1.5, close - 1.5, close, 1.0)
+        }
+        val dataset = MarketDataset(oscillating, DataSourceKind.IMPORTED_CSV, "user CSV", "1h", 1L, "XAU/USD")
+        val zeroCost = BacktestEngine.run(dataset, BacktestCosts(0.0, 0.0, 0.0))
+        val costed = BacktestEngine.run(dataset, BacktestCosts(0.2, 0.1, 0.05))
+        assertEquals(600, zeroCost.barCount)
+        assertEquals(420, zeroCost.splitIndex)
+        assertEquals(zeroCost.full.totalTrades, zeroCost.full.equityCurve.size)
+        assertTrue(zeroCost.assumptions.any { it.contains("stop is assumed first") })
+        assertTrue(zeroCost.full.totalTrades > 0)
+        assertEquals(zeroCost.full.totalTrades, costed.full.totalTrades)
+        assertTrue(costed.full.netPnlPerUnit < zeroCost.full.netPnlPerUnit)
+        assertTrue(costed.full.trades.all { it.entryIndex <= it.exitIndex && it.riskDistance > 0.0 })
+    }
+
+    @Test fun conflictingHigherTimeframeSignalGatesDirectionalSetupToWait() {
+        val primary = AnalysisResult(
+            direction = Direction.BUY, price = 2000.0, timestampMillis = 1_735_689_600_000L,
+            timeframe = "5m", dataSource = DataSourceKind.IMPORTED_CSV, score = 3,
+            reason = "base signal", evidence = emptyList(), conflicts = emptyList(), indicators = null,
+            structure = null, zones = emptyList(), entry = 2000.0, stopLoss = 1990.0,
+            takeProfit = 2020.0, rewardRisk = 2.0, instrument = "EUR/USD",
+        )
+        val opposition = primary.copy(direction = Direction.SELL, timeframe = "1h")
+        val context = MultiTimeframeResult(
+            "EUR/USD", "5m", listOf(TimeframeAssessment("1h", 250, opposition, "available")),
+            "conflicting", "Directions conflict.",
+        )
+        val gated = MultiTimeframeAnalyzer.applyGate(primary, context)
+        assertEquals(Direction.WAIT, gated.direction)
+        assertNull(gated.entry)
+        assertTrue(gated.conflicts.any { it.contains("conflicts") })
+    }
+
     @Test fun csvExportRoundTripsUtcCandlesWithoutLocaleAssumptions() {
         val source = parityCandles(4)
         val exported = CsvCandleParser.export(source)
@@ -103,6 +166,9 @@ not-a-time,1,2,0.5,1.5,3
         assertClose(2.0, result.rewardRisk)
         val tickBased = RiskInput(10_000.0, 1.0, 2_000.0, 1_990.0, 2_020.0, tickSize = 0.1, tickValuePerLot = 10.0).calculate()
         assertClose(result.riskPerLot, tickBased.riskPerLot)
+        val shortResult = RiskInput(10_000.0, 1.0, 2_000.0, 2_010.0, 1_980.0, contractSize = 100.0, side = TradeSide.SHORT).calculate()
+        assertClose(2.0, shortResult.rewardRisk)
+        assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2_000.0, 1_990.0, 2_020.0, contractSize = 1.0, side = TradeSide.SHORT).calculate() }.isFailure)
         assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2000.0, 1990.0, 2020.0).calculate() }.isFailure)
         assertTrue(runCatching { RiskInput(1_000.0, 10.0, 2000.0, 1990.0, 2020.0, contractSize = 1.0).calculate() }.isFailure)
         assertTrue(runCatching { RiskInput(1_000.0, 1.0, 2000.0, 2000.0, 2020.0, contractSize = 1.0).calculate() }.isFailure)
@@ -114,8 +180,10 @@ not-a-time,1,2,0.5,1.5,3
         val imported = live.copy(source = DataSourceKind.IMPORTED_CSV, sourceLabel = "local csv", instrument = "EUR/USD")
         val liveResult = AnalysisEngine.analyze(live, nowMillis = old.last().timestampMillis + 60L * 24 * 60 * 60 * 1000)
         val importedResult = AnalysisEngine.analyze(imported, nowMillis = old.last().timestampMillis + 60L * 24 * 60 * 60 * 1000)
+        val providerArchive = AnalysisEngine.analyze(imported.copy(source = DataSourceKind.HISTORICAL), nowMillis = old.last().timestampMillis + 60L * 24 * 60 * 60 * 1000)
         assertEquals(Direction.WAIT, liveResult.direction)
         assertTrue(liveResult.reason.contains("stale"))
+        assertTrue(providerArchive.reason.contains("stale"))
         assertFalse(importedResult.reason.contains("stale"))
         assertEquals("EUR/USD", importedResult.instrument)
     }

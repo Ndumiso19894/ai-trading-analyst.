@@ -21,11 +21,12 @@ object AnalysisEngine {
         val zones = SupportResistanceDetector.detect(candles, dataset.timeframe, allIndicators)
         if (latest == null) return wait(dataset, last.close, last.timestampMillis, "Indicator calculation failed.", zones, structure)
 
-        val liveSource = dataset.source == DataSourceKind.LIVE || dataset.source == DataSourceKind.DELAYED
-        if (liveSource && (last.timestampMillis > nowMillis + 60_000 || nowMillis - last.timestampMillis > maxLiveAgeMillis)) {
+        val providerSource = dataset.source != DataSourceKind.IMPORTED_CSV
+        val expectedInterval = timeframeMillis(dataset.timeframe)
+        val freshnessLimit = maxLiveAgeMillis.coerceAtLeast((expectedInterval ?: 0L) * 2L)
+        if (providerSource && (last.timestampMillis > nowMillis + 60_000 || nowMillis - last.timestampMillis > freshnessLimit)) {
             return wait(dataset, last.close, last.timestampMillis, "Market candle is stale or timestamped in the future; no directional signal issued.", zones, structure, latest)
         }
-        val expectedInterval = timeframeMillis(dataset.timeframe)
         if (expectedInterval != null && candles.size >= 3) {
             val recent = candles.takeLast(4)
             val hasRecentGap = recent.zipWithNext().any { (a, b) -> b.timestampMillis - a.timestampMillis > expectedInterval * 2 }

@@ -19,6 +19,7 @@ data class Candle(
 
 enum class DataSourceKind { LIVE, DELAYED, HISTORICAL, IMPORTED_CSV }
 enum class Direction { BUY, SELL, WAIT }
+enum class TradeSide { LONG, SHORT }
 enum class ZoneSide { SUPPORT, RESISTANCE }
 enum class ZoneStatus { ACTIVE, BROKEN, RETESTING }
 
@@ -109,6 +110,7 @@ data class RiskInput(
     val contractSize: Double? = null,
     val tickSize: Double? = null,
     val tickValuePerLot: Double? = null,
+    val side: TradeSide = TradeSide.LONG,
 )
 
 data class RiskResult(
@@ -127,6 +129,10 @@ fun RiskInput.calculate(): RiskResult {
     require(riskPercent.isFinite() && riskPercent > 0 && riskPercent <= 5) { "Risk percentage must be greater than 0 and no more than 5%." }
     require(entry.isFinite() && entry > 0 && stopLoss.isFinite() && stopLoss > 0 && takeProfit.isFinite() && takeProfit > 0) { "Prices must be positive finite numbers." }
     require(abs(entry - stopLoss) > 0) { "Entry and stop loss must be different." }
+    when (side) {
+        TradeSide.LONG -> require(stopLoss < entry && takeProfit > entry) { "For a long position, stop loss must be below entry and take profit above entry." }
+        TradeSide.SHORT -> require(stopLoss > entry && takeProfit < entry) { "For a short position, stop loss must be above entry and take profit below entry." }
+    }
     require((tickSize == null) == (tickValuePerLot == null)) { "Enter both tick size and tick value, or leave both blank." }
     val tick = tickSize
     val tickValue = tickValuePerLot

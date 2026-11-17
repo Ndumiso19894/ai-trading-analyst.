@@ -30,8 +30,10 @@ import com.goldlens.analyst.R
 import com.goldlens.analyst.core.AnalysisEngine
 import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.MarketDataset
+import com.goldlens.analyst.core.MultiTimeframeAnalyzer
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.toCandle
+import com.goldlens.analyst.data.toDataSourceKind
 import com.goldlens.analyst.data.toEntity
 import com.goldlens.analyst.data.saveAnalysis
 import com.goldlens.analyst.data.toEntity as zoneToEntity
@@ -195,19 +197,24 @@ class FloatingAssistantService : Service() {
         scope.launch {
             val dataset = withContext(Dispatchers.IO) {
                 val rows = GoldLensDatabase.get(this@FloatingAssistantService).candleDao().latest(instrument, timeframe, 5_000).asReversed()
-                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, DataSourceKind.IMPORTED_CSV, "Saved local candles", timeframe, System.currentTimeMillis(), instrument)
+                if (rows.isEmpty()) null else MarketDataset(rows.map { it.toCandle() }, rows.first().toDataSourceKind(), rows.first().sourceLabel, timeframe, System.currentTimeMillis(), instrument)
             }
             if (dataset == null) {
-                prefs.edit().putString("overlay_details", "No saved candle data for $timeframe. Import an OHLC CSV in GoldLens first.").apply()
+                prefs.edit().putString("overlay_details", "No saved candle data for $timeframe. Fetch provider candles or import an OHLC CSV in GoldLens first.").apply()
                 refreshPanel()
                 return@launch
             }
-            val result = withContext(Dispatchers.Default) { AnalysisEngine.analyze(dataset) }
+            val (baseResult, mtf) = withContext(Dispatchers.Default) {
+                val base = AnalysisEngine.analyze(dataset)
+                base to MultiTimeframeAnalyzer.analyze(dataset)
+            }
+            val result = MultiTimeframeAnalyzer.applyGate(baseResult, mtf)
             val database = GoldLensDatabase.get(this@FloatingAssistantService)
             withContext(Dispatchers.IO) { database.saveAnalysis(result.toEntity(), result.zones.map { it.zoneToEntity() }) }
             val summary = buildString {
-                append("${result.direction} · ${result.timeframe} · ${result.reason}\n")
-                result.price?.let { append("Last imported close: ${format(it)}\n") }
+                append("${result.direction} · ${result.instrument} · ${result.timeframe} · ${result.reason}\n")
+                append("Multi-timeframe: ${mtf.agreement} · ${mtf.explanation}").appendLine()
+                result.price?.let { append("Last saved candle close: ${format(it)}\n") }
                 result.stopLoss?.let { append("Stop ${format(it)} · Target ${format(result.takeProfit ?: it)} · R:R ${format(result.rewardRisk ?: 0.0)}\n") }
                 result.zones.take(3).forEach { append("${it.side} ${it.strength}: ${format(it.lower)}–${format(it.upper)} (${it.touches} touches, ${it.status})\n") }
             }
