@@ -22,28 +22,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Locate runner-provided Android SDK
-        shell: bash
+      - name: Set up Android SDK command-line tools
+        id: android-sdk
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '11076708'
+          accept-android-sdk-licenses: true
+          packages: 'platform-tools'
+      - name: Diagnose Android SDK availability
+        if: always()
         run: |
-          set -euo pipefail
-          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          if [[ ! -d "$sdk_root" ]]; then
-            echo "Android SDK was not present at $sdk_root" >&2
-            exit 1
-          fi
-          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
-          for candidate in "$sdk_root/cmdline-tools/latest/bin" "$sdk_root/cmdline-tools/bin" "$sdk_root/tools/bin"; do
-            if [[ -x "$candidate/sdkmanager" ]]; then
-              echo "$candidate" >> "$GITHUB_PATH"
-              break
-            fi
-          done
-          echo "SDK root: $sdk_root"
-          find "$sdk_root" -maxdepth 3 -type f -name sdkmanager -print
-          command -v sdkmanager
+          echo "::notice title=Android SDK setup::setup=${{ steps.android-sdk.outcome }} ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          if [[ -n "${ANDROID_HOME:-}" ]]; then ls -la "$ANDROID_HOME" || true; fi
+          command -v sdkmanager || true
       - name: Install Android API 35 build tools
-        run: sdkmanager --install 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
       - name: Set up Gradle 8.9 (open-source cache)
         uses: gradle/actions/setup-gradle@v4
         with:
