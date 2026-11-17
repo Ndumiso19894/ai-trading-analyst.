@@ -4,10 +4,11 @@
 
 A Render Blueprint is included in `render.yaml` for the current Arena branch. It configures a
 Python FastAPI web service named `goldlens-xau-api-ndumiso19894`, Virginia region, free
-instance, API health check and wildcard CORS without cookies. Its intended service URL is
-`https://goldlens-xau-api-ndumiso19894.onrender.com`; the service has **not** been created or
-verified because Render account/GitHub authorization must be completed by the owner. Do not
-consider that hostname live until `/health` is tested after the first deploy.
+instance, API health check and wildcard CORS without cookies. The owner reports connecting the
+GitHub repository to Render. However, the planned URL
+`https://goldlens-xau-api-ndumiso19894.onrender.com` returned a plain `Not Found` response on
+`/health` when checked after the repo connection was reported. The deployment is therefore not
+confirmed live; do not treat that host as working until it returns the app's expected JSON.
 
 ## Create it from a phone
 

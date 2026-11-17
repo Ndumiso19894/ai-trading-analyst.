@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2] — Render resumed (2026-11-17)
+- Reverted the Enzonic-hosting change at the owner's request and restored the Render Free
+  Blueprint, Android Render default and Render deployment notes. No Enzonic service was created.
+- Owner reports connecting the repository to Render. The planned Render `/health` URL returned
+  `Not Found` in a public check, so deployment and API integration remain unverified.
+
 ## [0.3.0] — phone-first backend preparation (2026-11-17)
 - Added a Render Free Blueprint for a stable HTTPS FastAPI service URL, health check, Virginia
   region and CORS configuration. It is not deployed: owner Render/GitHub authorization is needed.

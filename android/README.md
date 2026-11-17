@@ -59,8 +59,8 @@ release APK unsigned. No signing credential has been created or exposed in this 
 and Gradle 8.9. It runs `testDebugUnitTest`, `assembleDebug` and `assembleRelease`, then
 uploads APKs as the `goldlens-android-apks` artifact for 30 days.
 
-The v0.3.0 build with the Render Blueprint URL was verified in [Android build #44070173197](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44070173197)
-on commit `f3797675`. Open the run in GitHub Actions → **Artifacts** →
+The latest APK build with the planned Render URL is [Android build #44087781450](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44087781450)
+on commit `feace20a`. The build passed, but the target URL has not passed its public health check. Open the run in GitHub Actions → **Artifacts** →
 `goldlens-android-apks`; download and unzip it on a phone or computer. The CI debug signing
 key is ephemeral, so uninstall an older CI-built debug APK before installing this one (or
 use an owner-signed release build to preserve upgrade signing). CI verified both

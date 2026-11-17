@@ -15,12 +15,13 @@ field-verified behavior.
 - [x] Screenshot upload validation and tested Pillow sampling (not full chart interpretation)
 - [x] Render Free Blueprint (`render.yaml`) for the FastAPI monorepo and `/health` probe
 
-## Hosting — prepared, not deployed
-- [ ] Owner must authorize Render by signing in and connecting this GitHub repo/branch.
-  This Arena session has no Render account credentials or connected Render deployment tool.
-- [ ] Deploy Blueprint, confirm the actual hostname, and smoke-test the public endpoints.
-- [ ] Rebuild/test Android against the confirmed live URL. APK currently targets the Blueprint's
-  expected Render hostname, which is not live/verified yet.
+## Hosting — repo connected per owner; deployment not verified
+- [x] Owner reports connecting the GitHub repository to Render.
+- [ ] Confirm Render service/Blueprint is deployed from this branch, then verify the actual URL.
+  The planned `goldlens-xau-api-ndumiso19894.onrender.com/health` returned `Not Found` on the
+  latest public check, so no live endpoint is confirmed yet.
+- [ ] Smoke-test public APIs and rebuild/test Android against a verified URL. Current app target
+  is the Blueprint hostname, but must not be assumed working before the health check passes.
 - Render Free is $0 but sleeps, has ephemeral local files and no persistent disk; SQLite signal
   history will be lost on restart/sleep. Details in `documentation/DEPLOYMENT.md`.
 
@@ -38,7 +39,7 @@ field-verified behavior.
 - [x] Kotlin/Compose API client, health check, configurable/persisted advanced endpoint,
   analysis/market/history/screenshot actions
 - [x] Release networking is HTTPS-only; debug build permits HTTP for local testing
-- [x] CI built v0.3.0 APKs with JDK 17, Android API 35, Build Tools 35 and Gradle 8.9; current artifact run `44070173197`
+- [x] CI built v0.3.0 APKs with JDK 17, Android API 35, Build Tools 35 and Gradle 8.9; latest artifact run `44087781450`
 - [x] Default HTTPS host embedded in app and advanced saved override
 - [ ] Owner-signed release APK (requires owner-managed key secrets)
 - [ ] Physical/emulator interaction and test against deployed HTTPS API
@@ -46,7 +47,7 @@ field-verified behavior.
   available through its GitHub Actions run in a browser.
 
 ## Outstanding
-- Manual Render authorization/deployment and post-deploy endpoint verification
+- Verify Render Blueprint deployment and post-deploy endpoint checks
 - Durable signal history storage; Render Free disk is ephemeral, free Postgres expires after 30d
 - Local vision model/OCR, screenshot interpretation, robust market-structure strategies
 - Automated Android unit tests, device verification, API authentication/rate-limit/security review

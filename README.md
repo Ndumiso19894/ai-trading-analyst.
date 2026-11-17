@@ -25,9 +25,10 @@ engines, CSV ingestion, SQLite signal log, and a native Android source project.
 - Screenshot upload is **image validation/color sampling only** and deliberately always
   returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
 - Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
-  image upload. CI built v0.3.0 with the expected Render URL in a signed-debug APK and an
-  unsigned release APK. The [current APK artifact](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44070173197)
-  is available for 30 days. The backend itself is not live until owner authorization/deploy.
+  image upload. GitHub Actions built a signed-debug APK and unsigned release APK embedding the
+  planned Render URL in [run 44087781450](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44087781450).
+  It is installable for testing but its backend target has not passed `/health`; do not treat the
+  APK as connected to a working API yet.
 
 ## Run locally
 
@@ -95,11 +96,12 @@ CSV you are authorized to use; the analyzer works offline with CSV.
 
 ## Phone-first backend deployment
 
-A free Render Blueprint is in `render.yaml`. Render account/GitHub authorization is required
-before a live service exists; see `documentation/DEPLOYMENT.md` for the phone workflow, free
-sleep/storage limits, and verification checklist. The Android app is preconfigured for the
-Blueprint's expected HTTPS host and retains an advanced, persistent endpoint override. That
-host is a target, not a verified public API until the owner completes the Render deployment.
+A free Render Blueprint is in `render.yaml`, and the owner reports connecting the repository
+to Render. The planned hostname still returned `Not Found` on `/health` in the latest check, so
+the backend is not verified live. See `documentation/DEPLOYMENT.md` for the phone workflow,
+free-tier sleep/storage limits and endpoint verification. Android defaults to the planned HTTPS
+host and keeps an advanced, persistent URL override; the default must not be considered working
+until the health check succeeds.
 
 ## Documentation
 
