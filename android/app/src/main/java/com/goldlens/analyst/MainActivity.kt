@@ -44,6 +44,7 @@ import com.goldlens.analyst.core.MarketDataset
 import com.goldlens.analyst.core.PriceZone
 import com.goldlens.analyst.core.RiskInput
 import com.goldlens.analyst.core.RiskResult
+import com.goldlens.analyst.core.calculate
 import com.goldlens.analyst.core.ZoneSide
 import com.goldlens.analyst.core.ZoneStatus
 import com.goldlens.analyst.data.GoldLensDatabase
