@@ -1,61 +1,74 @@
-# Phone-first backend deployment (Render Free)
+# Enzonic Deploy (Free)
 
-## Deployment status
+## Current status
 
-A Render Blueprint is included in `render.yaml` for the current Arena branch. It configures a
-Python FastAPI web service named `goldlens-xau-api-ndumiso19894`, Virginia region, free
-instance, API health check and wildcard CORS without cookies. The owner reports connecting the
-GitHub repository to Render. However, the planned URL
-`https://goldlens-xau-api-ndumiso19894.onrender.com` returned a plain `Not Found` response on
-`/health` when checked after the repo connection was reported. The deployment is therefore not
-confirmed live; do not treat that host as working until it returns the app's expected JSON.
+The owner reports that Enzonic gave the project URL `https://ai-trading-analyst.enzonic.dev/`.
+A public check currently returns Enzonic's `404 · DEPLOYMENT_NOT_FOUND` page at `/`, `/health`,
+`/api/providers` and `/docs`; no app deployment is mapped to that address yet. This is an
+Enzonic Deploy project URL, not a Render URL and not the separate Python Hosting server panel.
+Render is no longer the selected provider, and `render.yaml` has been removed.
 
-## Create it from a phone
+The build log supplied by the owner says dependencies installed, then FastAPI detection failed
+because the app object was nested at `backend/app/main.py`, while the project root was `backend`.
+The repository now has `backend/main.py`, a top-level shim that imports and exports the existing
+`app` instance. It does not move or duplicate the application. A unit test asserts that the
+shim and original module expose the same FastAPI object.
 
-Render requires an account and Git provider authorization. From a mobile browser:
+## Enzonic Deploy project settings
 
-1. Open [Render Dashboard](https://dashboard.render.com/) and sign in/create an account.
-2. Authorize GitHub repository access when prompted.
-3. Choose **New → Blueprint** and select `Ndumiso19894/ai-trading-analyst.`.
-4. Select branch `arena/8a1d0765-ai-trading-analyst` (the branch containing `render.yaml`).
-5. Review the blueprint. Keep the service plan at **Free**; do not select or upgrade to a paid
-   instance. Deploy the blueprint.
-6. Wait for the deployment to show **Live**. Copy the actual `https://…onrender.com` URL shown
-   on the service page. Check `https://<actual-host>/health` in the phone browser. Expected JSON
-   has `status: ok` and app version `0.3.0`.
-7. Check `/api/providers`, `/api/market/candles?timeframe=1h&period=5d`,
-   `/api/analysis?timeframe=1h&period=3mo`, `/api/signals`,
-   `/api/risk/calculate` (POST JSON), and `/api/screenshot/analyze` (multipart PNG/JPEG).
-   Market/analysis endpoints depend on Yahoo Finance being reachable from the host; they can
-   return 502 if the provider blocks requests. Screenshot processing always abstains with WAIT.
+Use the Free plan only; Enzonic's official [Deploy page](https://enzonic.com/cloud/deploy)
+advertises its free tier as $0/no-card. Do not choose a paid plan or upgrade. Official free
+limits include 150 GB monthly bandwidth, 2 million function invocations, and 400 GB-hours of
+function compute. It lists FastAPI support; functions have 1 GB memory and a 300-second timeout.
+Free server mode is one 512 MB instance and sleeps after 15 idle minutes. Confirm the current
+limits in the account console; do not add paid resources.
 
-## Free plan behavior and data caution
+Set or confirm these project settings:
 
-Render's official Free plan is $0, but is intended for testing/hobby use rather than
-production. Free web services sleep after 15 minutes without requests; wake-up takes about a
-minute. The allowance is 750 free instance-hours per workspace per calendar month, and
-exhaustion suspends free services until the next month. The service may restart at any time.
-Free services have ephemeral filesystems: SQLite signal history is lost on sleep/restart or
-redeploy. Persistent disks are not available to free web services. Render's free Postgres
-expires after 30 days, so this project does not use it as a purported permanent database.
-Render also warns that unusually high service-initiated external API traffic may cause
-suspension. Details: [Render Free limits](https://render.com/docs/free).
+- Git repository: `Ndumiso19894/ai-trading-analyst.`
+- Branch: the branch that Enzonic is meant to deploy. This Arena branch is
+  `arena/8a1d0765-ai-trading-analyst`.
+- Root directory: `backend`
+- Runtime/framework: Python / FastAPI; Python 3.11 is supported.
+- Dependencies: `requirements.txt` is in the selected root. Enzonic says it installs Python
+  dependencies automatically; if the console asks for a build command, use
+  `pip install -r requirements.txt`.
+- Entry point: `main:app`. The shim at `backend/main.py` re-exports `app` from `app.main` so the
+  detector can find it at the configured root. For Enzonic's function deployment, let the
+  platform's FastAPI adapter handle requests; only use a Uvicorn command if the dashboard/logs
+  specifically say it selected server mode and asks for a server start command.
 
-Render supports free web services and managed TLS; requests use HTTPS by default. The app's
-release manifest disallows cleartext HTTP. Android's debug manifest allows cleartext only for
-development; the app default uses HTTPS. API CORS is wildcard and credential-free; native
-Android networking itself is not subject to browser CORS.
+The repository push should create a new build/preview if this branch is connected. Wait for the
+build to reach **Ready**. If the console associates the branch preview with a different URL,
+copy that exact URL; the project's production alias may remain unassigned until a ready build is
+promoted. Do not assume the original `.enzonic.dev` URL works merely because it appears in the
+project settings. If the build still fails, share the new final error lines (not tokens or private
+environment values).
 
-## Build and smoke-test an APK with the actual URL
+## Verify and build the phone APK
 
-The Android Gradle build defaults to the Blueprint's intended host, but the host is **not yet
-verified**. After deployment, open GitHub Actions → Android build → **Run workflow** and pass
-the actual API root in `backend_url` (even if it matches the default). A manual run first
-smoke-tests health, provider metadata, market candles, gold analysis, signal history, risk,
-screenshot upload and CORS, then embeds that HTTPS URL in the APK. Market candles/analysis
-checks fail if the upstream Yahoo provider returns an error. You can instead enter a custom
-HTTPS endpoint in the app's Advanced connection settings (it is saved on-device).
+After Enzonic reports a ready deployment, open its actual HTTPS deployment URL plus `/health`;
+expected JSON contains `"status":"ok"`. Then manually run GitHub Actions → **Android build** →
+**Run workflow** and pass the exact HTTPS root URL. The workflow runs `scripts/smoke_live_api.py`
+before producing an APK, checking:
 
-Build artifacts are available on the workflow run page for 30 days. The debug APK is signed
-for testing; a production release APK requires owner-managed signing secrets as described in
-`android/README.md`.
+- `/health` and `/api/providers`
+- market candles and gold analysis (requires reachable Yahoo Finance)
+- signal history after analysis
+- risk calculation
+- screenshot upload using a generated PNG
+- wildcard CORS preflight
+
+A smoke-test failure stops the build rather than publishing an APK as verified. The APK URL is
+embedded as the Android default, while the saved Advanced connection setting remains available.
+The screenshot endpoint only validates/samples pixels and always returns `WAIT`; it is not a
+vision model. Market data can be delayed or unavailable. The backend is unauthenticated, so do
+not expose secrets through it.
+
+## Data and free-tier caveats
+
+No API keys are required for the current backend. Never commit `.env`, credentials, or access
+tokens. CORS is wildcard without credentials. SQLite signal history is local storage; Enzonic
+Deploy function/server filesystem persistence across deployments or instances is not guaranteed.
+Do not treat it as durable until verified. Free functions/server behavior and quotas can change;
+avoid paid upgrades unless the owner explicitly approves them.

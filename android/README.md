@@ -1,11 +1,10 @@
 # Android client
 
 Native Kotlin + Jetpack Compose source consuming the FastAPI service. The app checks `/health`
-on first launch and defaults to the planned HTTPS Render host
-`https://goldlens-xau-api-ndumiso19894.onrender.com`. That address is only a target until the
-owner creates/deploys the Render service; deployment status and phone steps are in
-`documentation/DEPLOYMENT.md`. Backend URL override is under Advanced connection settings and
-is saved on-device. Release builds require HTTPS; debug builds allow HTTP for local testing.
+on first launch when a default URL is configured. Render is no longer selected. Enzonic's
+project URL is not live yet, so the default is blank until a real HTTPS URL passes checks.
+Advanced connection settings retains the saved URL override. Release builds require HTTPS;
+debug builds allow HTTP for local testing.
 
 ## Local build
 
@@ -59,15 +58,9 @@ release APK unsigned. No signing credential has been created or exposed in this 
 and Gradle 8.9. It runs `testDebugUnitTest`, `assembleDebug` and `assembleRelease`, then
 uploads APKs as the `goldlens-android-apks` artifact for 30 days.
 
-The latest APK build with the planned Render URL is [Android build #44087781450](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44087781450)
-on commit `feace20a`. The build passed, but the target URL has not passed its public health check. Open the run in GitHub Actions → **Artifacts** →
-`goldlens-android-apks`; download and unzip it on a phone or computer. The CI debug signing
-key is ephemeral, so uninstall an older CI-built debug APK before installing this one (or
-use an owner-signed release build to preserve upgrade signing). CI verified both
-`app-debug.apk` (signed with the standard debug key, installable for testing) and
-`app-release-unsigned.apk`. The release APK is not installable until signed; configure the
-four owner secrets above and rerun the workflow for a signed release. The sandbox could not
-download the Action artifact archive because its blob-storage host is blocked, but the
-artifact is available from the linked GitHub run for its 30-day retention. On the phone,
-allow installation from the browser/file manager if prompted. Keep the release key secure
-and backed up; losing it prevents signing compatible future updates.
+The last APK build ([run #44087781450](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44087781450))
+embeds Render's URL and is stale for Enzonic. Do not use it as the Enzonic-connected app.
+After the Enzonic deployment is live, manually run the workflow and provide its exact HTTPS URL;
+the workflow smoke-tests endpoints before producing `goldlens-android-apks`. That future run
+will be the download link for the Enzonic-ready APK. Without owner signing secrets, the release
+APK is unsigned; the debug APK is installable for testing but uses an ephemeral CI key.

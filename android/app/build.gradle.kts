@@ -5,7 +5,7 @@ plugins {
 }
 
 val configuredBackendUrl = providers.gradleProperty("backendBaseUrl")
-    .orElse("https://goldlens-xau-api-ndumiso19894.onrender.com")
+    .orElse("")
     .get()
 
 android {

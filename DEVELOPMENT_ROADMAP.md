@@ -4,7 +4,7 @@ Updated 2026-11-17. Status distinguishes implemented code from externally deploy
 field-verified behavior.
 
 ## Web/backend groundwork — substantially implemented
-- [x] FastAPI app, CORS, React/TypeScript dashboard, Vite API proxy
+- [x] FastAPI app, credential-free CORS, React/TypeScript dashboard, Vite API proxy
 - [x] Yahoo chart adapter for XAUUSD=X; source/timestamp caveats, bounded memory cache and CSV fallback
 - [x] CSV OHLC validation, duplicate handling, ordering, timeframe support and upload limits
 - [x] Candlestick chart, indicators, heuristic swing structure and pivot support/resistance
@@ -13,17 +13,19 @@ field-verified behavior.
   chronological split and performance metrics
 - [x] SQLite signal history and best-effort outcomes
 - [x] Screenshot upload validation and tested Pillow sampling (not full chart interpretation)
-- [x] Render Free Blueprint (`render.yaml`) for the FastAPI monorepo and `/health` probe
+- [x] Enzonic FastAPI detection shim at `backend/main.py`, exposing original `app.main:app`
 
-## Hosting — repo connected per owner; deployment not verified
-- [x] Owner reports connecting the GitHub repository to Render.
-- [ ] Confirm Render service/Blueprint is deployed from this branch, then verify the actual URL.
-  The planned `goldlens-xau-api-ndumiso19894.onrender.com/health` returned `Not Found` on the
-  latest public check, so no live endpoint is confirmed yet.
-- [ ] Smoke-test public APIs and rebuild/test Android against a verified URL. Current app target
-  is the Blueprint hostname, but must not be assumed working before the health check passes.
-- Render Free is $0 but sleeps, has ephemeral local files and no persistent disk; SQLite signal
-  history will be lost on restart/sleep. Details in `documentation/DEPLOYMENT.md`.
+## Hosting — Enzonic Deploy build fix pushed, deployment not verified
+- [x] Owner-supplied Enzica build diagnosis: build failed at FastAPI detection because app module
+  was nested below the selected backend root.
+- [x] Added a top-level `backend/main.py` re-export and a test checking it is the same FastAPI app.
+- [ ] Wait for Enzonic to build this branch and reach Ready. Supplied production URL currently
+  returns `DEPLOYMENT_NOT_FOUND`; no live API URL has been confirmed.
+- [ ] Verify health and API routes; Yahoo market data depends on egress from Enzonic.
+- [ ] Build new Android APK with verified URL and test device/backend integration.
+- Enzonic Deploy Free has bounded invocation/bandwidth/compute allowances; free server mode sleeps
+  after 15 idle minutes. No paid plan is selected. See `documentation/DEPLOYMENT.md`.
+- Render is no longer selected; its Blueprint was removed.
 
 ## Partial / limited functionality
 - Screenshot upload always returns WAIT after color sampling; no OCR/vision model or reliable
@@ -35,20 +37,18 @@ field-verified behavior.
 - Signal outcome refresh is best-effort, TP1/SL only; no broker fill simulation or full costs.
 - No API authentication, push notifications, durable hosted history, or browser E2E suite.
 
-## Android — CI build verified, device test outstanding
+## Android — CI build verified, Enzonic URL pending
 - [x] Kotlin/Compose API client, health check, configurable/persisted advanced endpoint,
   analysis/market/history/screenshot actions
 - [x] Release networking is HTTPS-only; debug build permits HTTP for local testing
-- [x] CI built v0.3.0 APKs with JDK 17, Android API 35, Build Tools 35 and Gradle 8.9; latest artifact run `44087781450`
-- [x] Default HTTPS host embedded in app and advanced saved override
-- [ ] Owner-signed release APK (requires owner-managed key secrets)
-- [ ] Physical/emulator interaction and test against deployed HTTPS API
-- Local SDK/JDK download and CI artifact download are blocked from the sandbox; CI artifact is
-  available through its GitHub Actions run in a browser.
+- [x] Android CI build workflow requires an HTTPS URL and smoke-tests before building
+- [x] App default remains empty until a verified host is available; advanced URL setting remains
+- [ ] Build a fresh CI APK after Enzonic smoke tests pass.
+- [ ] Physical/emulator interaction against deployed HTTPS API and owner signing for release.
 
 ## Outstanding
-- Verify Render Blueprint deployment and post-deploy endpoint checks
-- Durable signal history storage; Render Free disk is ephemeral, free Postgres expires after 30d
+- Enzonic deployment readiness, public API tests, Android APK built against live URL
+- Confirm durable storage for SQLite history; do not assume function filesystem persistence
 - Local vision model/OCR, screenshot interpretation, robust market-structure strategies
 - Automated Android unit tests, device verification, API authentication/rate-limit/security review
 - Independent XAU/USD source validation and longer-term historical strategy validation

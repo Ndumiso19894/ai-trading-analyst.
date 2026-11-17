@@ -25,10 +25,8 @@ engines, CSV ingestion, SQLite signal log, and a native Android source project.
 - Screenshot upload is **image validation/color sampling only** and deliberately always
   returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
 - Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
-  image upload. GitHub Actions built a signed-debug APK and unsigned release APK embedding the
-  planned Render URL in [run 44087781450](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44087781450).
-  It is installable for testing but its backend target has not passed `/health`; do not treat the
-  APK as connected to a working API yet.
+  image upload. The last CI APK build targeted Render and is stale for Enzonic. A fresh APK will
+  be built only after an actual Enzonic URL passes the live API smoke checks.
 
 ## Run locally
 
@@ -73,10 +71,10 @@ gradle assembleDebug
 # Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The app defaults to the Render Blueprint HTTPS host and checks `/health` on launch. That
-hostname will not respond until the owner deploys the Blueprint. In the app, **Advanced
-connection settings** permits a different HTTPS URL and saves it on-device. HTTP is allowed
-only in debug builds for local development.
+The app checks `/health` on launch when a default HTTPS URL is configured. Until the Enzonic
+URL is live and verified, the default remains blank rather than pointing to an untested host.
+**Advanced connection settings** lets you save a manual HTTPS endpoint on-device. HTTP is only
+allowed in debug builds for local development.
 
 ## CSV format
 
@@ -96,12 +94,11 @@ CSV you are authorized to use; the analyzer works offline with CSV.
 
 ## Phone-first backend deployment
 
-A free Render Blueprint is in `render.yaml`, and the owner reports connecting the repository
-to Render. The planned hostname still returned `Not Found` on `/health` in the latest check, so
-the backend is not verified live. See `documentation/DEPLOYMENT.md` for the phone workflow,
-free-tier sleep/storage limits and endpoint verification. Android defaults to the planned HTTPS
-host and keeps an advanced, persistent URL override; the default must not be considered working
-until the health check succeeds.
+Enzonic Deploy is the current free hosting target. The build failed because its FastAPI detector
+could not see the nested app; `backend/main.py` now exposes the existing FastAPI instance at the
+configured `backend/` root. Enzonic currently returns `DEPLOYMENT_NOT_FOUND` for the supplied
+project URL, so no live backend is verified. Android keeps an advanced saved URL override and has
+no fabricated default until a real deployment passes checks. See `documentation/DEPLOYMENT.md`.
 
 ## Documentation
 

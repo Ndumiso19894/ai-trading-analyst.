@@ -1,18 +1,12 @@
 name: Android build
 
 on:
-  push:
-    branches: [main, 'arena/**']
-    paths:
-      - 'android/**'
-      - '.github/workflows/android-build.yml'
   workflow_dispatch:
     inputs:
       backend_url:
-        description: 'Public HTTPS API root URL embedded in the APK (omit to use the Render Blueprint default)'
-        required: false
+        description: 'Verified public HTTPS API root URL; manual runs smoke-test the live endpoints before embedding it'
+        required: true
         type: string
-        default: 'https://goldlens-xau-api-ndumiso19894.onrender.com'
 
 permissions:
   contents: read
@@ -50,7 +44,7 @@ jobs:
       - name: Smoke-test public HTTPS API before building phone APK
         if: github.event_name == 'workflow_dispatch'
         env:
-          BACKEND_URL: ${{ github.event.inputs.backend_url || 'https://goldlens-xau-api-ndumiso19894.onrender.com' }}
+          BACKEND_URL: ${{ github.event.inputs.backend_url || '' }}
         run: python3 scripts/smoke_live_api.py
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -80,14 +74,18 @@ jobs:
         working-directory: android
         shell: bash
         env:
-          BACKEND_URL: ${{ github.event.inputs.backend_url || 'https://goldlens-xau-api-ndumiso19894.onrender.com' }}
+          BACKEND_URL: ${{ github.event.inputs.backend_url || '' }}
         run: |
           set +e
-          if [[ ! "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]]; then
+          if [[ -n "$BACKEND_URL" && ! "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]]; then
             echo "::error::APK backend URL must use HTTPS"
             exit 2
           fi
-          echo "Embedding backend URL: $BACKEND_URL"
+          if [[ -z "$BACKEND_URL" ]]; then
+            echo "No deployed URL supplied; building an unconfigured development APK only."
+          else
+            echo "Embedding verified backend URL: $BACKEND_URL"
+          fi
           gradle --no-daemon --stacktrace -PbackendBaseUrl="$BACKEND_URL" testDebugUnitTest assembleDebug assembleRelease > "$RUNNER_TEMP/android-gradle.log" 2>&1
           result=$?
           tail -n 100 "$RUNNER_TEMP/android-gradle.log"

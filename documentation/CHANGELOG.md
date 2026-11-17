@@ -1,19 +1,27 @@
 # Changelog
 
-## [0.3.2] — Render resumed (2026-11-17)
-- Reverted the Enzonic-hosting change at the owner's request and restored the Render Free
-  Blueprint, Android Render default and Render deployment notes. No Enzonic service was created.
-- Owner reports connecting the repository to Render. The planned Render `/health` URL returned
-  `Not Found` in a public check, so deployment and API integration remain unverified.
+## [0.3.3] — Enzonic Deploy FastAPI discovery fix (2026-11-17)
+- Added `backend/main.py`, a top-level re-export of the existing `app.main:app`, because Enzica's
+  build report said FastAPI detection only looked for an app entry at the selected backend root.
+- Added a regression test asserting the root shim exports the original FastAPI instance.
+- Enzonic is the selected hosting target after Render required payment; removed the Render
+  Blueprint and cleared the Android default until Enzonic provides a live, verified HTTPS URL.
+- The supplied `ai-trading-analyst.enzonic.dev` URL returns `DEPLOYMENT_NOT_FOUND`; no new
+  Enzonic build or API integration is confirmed yet.
+
+## [0.3.2] — Render resumed then stopped (2026-11-17)
+- Render configuration and Android defaults were briefly restored at the owner's request.
+- The planned Render health URL returned `Not Found`; the owner reported Render required payment,
+  so it is no longer selected.
+
+## [0.3.1] — Enzonic Free Python Hosting preparation (2026-11-17)
+- Prepared a Uvicorn entrypoint and documented the separate Enzonic Python server.
+- This effort was superseded when the owner attempted Enzonic Deploy; no server was provisioned.
 
 ## [0.3.0] — phone-first backend preparation (2026-11-17)
-- Added a Render Free Blueprint for a stable HTTPS FastAPI service URL, health check, Virginia
-  region and CORS configuration. It is not deployed: owner Render/GitHub authorization is needed.
-- Android now checks health on launch, defaults to the Blueprint host, and stores an advanced
-  endpoint override. Release networking requires HTTPS; HTTP remains debug-only.
-- Added Render free-tier/sleep/ephemeral-history caveats and phone deployment steps.
-- Android v0.3.0 CI build passed (run `44069079549`) and uploaded the phone-first APKs. The
-  API URL is the planned Render hostname; no public API deployment has been verified.
+- Android health check, saved advanced HTTPS endpoint override, analysis/market/history/screenshot
+  actions; release networking HTTPS-only and HTTP debug-only.
+- Backend CORS and API tests, backend deployment preparation, phone-first docs.
 
 ## [0.2.0] — analysis and application milestone (2026-11-17)
 - Added Yahoo chart data adapter with source caveats and bounded memory cache; CSV import and
@@ -25,12 +33,7 @@
 - Replaced static dashboard with responsive functional React client and candlestick chart.
 - Added safe image upload, Pillow decode and color sampling that always abstains (not a chart
   vision engine); tested API behavior.
-- Added Kotlin/Compose Android client source; initial local build blocked by missing toolchain.
-- Added Android CI build workflow using JDK 17, Android API 35 and Gradle 8.9; successful run
-  `44065622695` uploaded the signed-debug and unsigned-release APKs. No release secrets are
-  stored in CI. Owner-supplied secrets enable release signing.
-- Local Android tool installation and artifact retrieval are blocked by sandbox network
-  restrictions; CI compilation and APK packaging were verified remotely.
+- Added Kotlin/Compose Android client and Android CI workflow.
 
 ## [0.1.0] — Phase 1 foundation
 - Initial FastAPI API, React dashboard, project layout, docs and environment configuration.
