@@ -25,9 +25,9 @@ engines, CSV ingestion, SQLite signal log, and a native Android source project.
 - Screenshot upload is **image validation/color sampling only** and deliberately always
   returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
 - Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
-  image upload. Android CI previously built APKs, but those builds pointed at the abandoned
-  Render target and are not current installables. The Enzonic URL is not known until the owner
-  provisions the free server; the app has no fabricated default until that URL is verified.
+  image upload. CI built v0.3.0 with the expected Render URL in a signed-debug APK and an
+  unsigned release APK. The [current APK artifact](https://github.com/Ndumiso19894/ai-trading-analyst./actions/runs/44070173197)
+  is available for 30 days. The backend itself is not live until owner authorization/deploy.
 
 ## Run locally
 
@@ -72,11 +72,10 @@ gradle assembleDebug
 # Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The Android app's default backend URL remains empty until a public Enzonic HTTPS address has
-actually been provisioned and verified; no placeholder is presented as a live API. **Advanced
-connection settings** permits a manual HTTPS URL and saves it on-device. HTTP is allowed only
-in debug builds for local development. See `documentation/DEPLOYMENT.md` for Enzonic's free
-Python server setup and the pending owner authorization/provisioning step.
+The app defaults to the Render Blueprint HTTPS host and checks `/health` on launch. That
+hostname will not respond until the owner deploys the Blueprint. In the app, **Advanced
+connection settings** permits a different HTTPS URL and saves it on-device. HTTP is allowed
+only in debug builds for local development.
 
 ## CSV format
 
@@ -96,11 +95,11 @@ CSV you are authorized to use; the analyzer works offline with CSV.
 
 ## Phone-first backend deployment
 
-Render is abandoned and there is no Render configuration. Enzonic Free Python Hosting is the
-selected target; the backend is prepared with `backend/start.sh`, but Enzonic account setup,
-server provisioning, public HTTPS routing and endpoint verification remain pending. The
-planned URL cannot be embedded until Enzonic provides the actual address. See
-`documentation/DEPLOYMENT.md`.
+A free Render Blueprint is in `render.yaml`. Render account/GitHub authorization is required
+before a live service exists; see `documentation/DEPLOYMENT.md` for the phone workflow, free
+sleep/storage limits, and verification checklist. The Android app is preconfigured for the
+Blueprint's expected HTTPS host and retains an advanced, persistent endpoint override. That
+host is a target, not a verified public API until the owner completes the Render deployment.
 
 ## Documentation
 

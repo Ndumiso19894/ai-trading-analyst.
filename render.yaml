@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: goldlens-xau-api-ndumiso19894
+    runtime: python
+    plan: free
+    region: virginia
+    branch: arena/8a1d0765-ai-trading-analyst
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ORIGINS
+        value: '*'
