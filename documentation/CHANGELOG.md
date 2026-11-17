@@ -6,7 +6,8 @@
 - Android now checks health on launch, defaults to the Blueprint host, and stores an advanced
   endpoint override. Release networking requires HTTPS; HTTP remains debug-only.
 - Added Render free-tier/sleep/ephemeral-history caveats and phone deployment steps.
-- Android CI build with the new URL is pending; no public API deployment has been verified.
+- Android v0.3.0 CI build passed (run `44069079549`) and uploaded the phone-first APKs. The
+  API URL is the planned Render hostname; no public API deployment has been verified.
 
 ## [0.2.0] — analysis and application milestone (2026-11-17)
 - Added Yahoo chart data adapter with source caveats and bounded memory cache; CSV import and
