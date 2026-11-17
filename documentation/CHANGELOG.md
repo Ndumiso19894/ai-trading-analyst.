@@ -10,9 +10,11 @@
 - Replaced static dashboard with responsive functional React client and candlestick chart.
 - Added safe image upload, Pillow decode and color sampling that always abstains (not a chart
   vision engine); tested API behavior.
-- Added Kotlin/Compose Android client source. APK was not built because JDK/SDK/Gradle absent.
+- Added Kotlin/Compose Android client source; initial local build blocked by missing toolchain.
+- Added Android CI build workflow using JDK 17, Android API 35 and Gradle 8.9; it uploads a
+  debug-signed APK and unsigned release APK. No release secrets are stored in CI.
 - Tests: backend suite and frontend production build executed; live provider request blocked
-  by sandbox networking.
+  by sandbox networking. Android workflow result is pending.
 
 ## [0.1.0] — Phase 1 foundation
 - Initial FastAPI API, React dashboard, project layout, docs and environment configuration.

@@ -24,8 +24,9 @@ engines, CSV ingestion, SQLite signal log, and a native Android source project.
 - SQLite signal log and best-effort outcome refresh from later provider bars at the signal timeframe.
 - Screenshot upload is **image validation/color sampling only** and deliberately always
   returns WAIT. It does not recognize chart structure or claim true screenshot analysis.
-- Kotlin/Jetpack Compose Android source scaffold for backend analysis, market, history and
-  image upload. APK build has not been verified (no Java/Android SDK in this environment).
+- Kotlin/Jetpack Compose Android client source for backend analysis, market, history and
+  image upload, with a GitHub Actions build workflow. Local toolchain downloads are blocked
+  in this sandbox; consult workflow results for build/APK status.
 
 ## Run locally
 

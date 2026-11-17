@@ -35,9 +35,11 @@ is not equivalent to validated on a real broker/feed**.
 - Frontend build was verified; browser-driven end-to-end test suite is not present.
 
 ## Android — source scaffold only
-- [x] Kotlin / Jetpack Compose source, health-data/analysis/history actions, screenshot picker
-- [ ] JDK/Android SDK/Gradle unavailable in this environment: compilation and APK generation
-  not performed. Native UI and network behavior therefore remain unverified.
+- [x] Kotlin / Jetpack Compose source, analysis/market/history API actions and screenshot picker
+- [x] Secure environment-variable release signing configuration; no credentials committed
+- [x] Added GitHub Actions JDK 17/API 35/Gradle 8.9 build workflow (run status pending)
+- [ ] Local JDK/Android SDK downloads are blocked by sandbox network restrictions; verify CI
+  compilation and retrieve APK artifact before claiming the native build is complete.
 
 ## Not started / outstanding
 - True local vision model integration, OCR, chart-pattern/screenshot inference tests
