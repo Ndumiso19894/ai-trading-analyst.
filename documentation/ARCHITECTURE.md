@@ -47,7 +47,15 @@ There is no Android MediaProjection workflow or validated chart OCR/vision. The 
 
 ## Background monitoring and Telegram delivery
 
-Android `MarketSignalWorker` (WorkManager) runs an immediate scan plus a 15-minute periodic scan across all supported instruments on the selected timeframe. Each scan fetches the Yahoo snapshot, analyzes it locally, persists new closed-candle sets/analyses to Room, and alerts only on new BUY/SELL directional states (WAIT and repeated same-direction scans are suppressed). Alerts are local notifications and, when enabled, Telegram Bot API messages to a user-configured chat. The bot token is encrypted with a non-exportable Android Keystore AES-GCM key and is never logged. Android scheduling is best-effort under Doze/battery limits; no uninterrupted monitoring guarantee is made, and Yahoo data remains unofficial historical/reference data.
+Android `MarketSignalWorker` (WorkManager) runs an immediate scan plus a 15-minute periodic scan across all supported instruments on the selected timeframe. Each scan fetches the market-data snapshot, analyzes it locally, persists new closed-candle sets/analyses to Room, and alerts only on new BUY/SELL directional states (WAIT and repeated same-direction scans are suppressed). Alerts are local notifications (with app icon) and, when enabled, Telegram Bot API messages to a user-configured chat. Telegram delivers picture-format chart signals (PNG candlestick chart + text caption) only for safe setups: R:R ≥ 2.0, evidence score ≥ 3, and no conflicting signals. The bot token is encrypted with a non-exportable Android Keystore AES-GCM key and is never logged. Android scheduling is best-effort under Doze/battery limits; no uninterrupted monitoring guarantee is made, and market data remains unofficial historical/reference data.
+
+## Forex tutoring
+
+The Learn tab provides educational lessons: what forex is, reading candlesticks, support and resistance, risk management rules (max 5% risk, R:R ≥ 2.0, stop loss before entry), understanding BUY/SELL/WAIT signals, and important disclaimers. Content is educational, not financial advice.
+
+## Unimplemented cloud systems
+
+No Google OAuth/Drive backup, GitHub snapshot sync, or unified sync manager is implemented inside the app. Repository backups to Google Drive are performed externally from this session via the connected Google Drive app.
 
 ## Unimplemented cloud systems
 

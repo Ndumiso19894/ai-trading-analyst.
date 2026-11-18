@@ -1,8 +1,11 @@
 # Changelog
 
-## [0.6.0-dev] — background monitoring and Telegram signal delivery (2026-11-17)
-- Added WorkManager background scans (immediate + every 15 minutes when Android permits) across all supported instruments on the selected timeframe, refreshing stored Yahoo snapshots and posting local notifications for new BUY/SELL states only.
-- Added optional Telegram delivery: user-configured bot token encrypted with Android Keystore AES-GCM, chat-ID discovery from bot messages, test message, and deduplicated BUY/SELL-only alerts with Yahoo source caveats.
+## [0.6.0-dev] — background monitoring, picture signals, Forex tutoring (2026-11-18)
+- Added WorkManager background scans (immediate + every 15 minutes when Android permits) across all supported instruments on the selected timeframe, refreshing stored market-data snapshots and posting local notifications with app icon for new BUY/SELL states only.
+- Added optional Telegram delivery: user-configured bot token encrypted with Android Keystore AES-GCM, chat-ID discovery from bot messages, test message, and deduplicated BUY/SELL-only alerts. Telegram sends picture-format chart signals (PNG candlestick chart + text caption) for safe setups only: R:R ≥ 2.0, evidence score ≥ 3, no conflicts. Market-data source caveats replace Yahoo mentions in the UI.
+- Added a dedicated Signals tab showing all supported instruments, why-this-market rationale, entry/stop/target/R:R metrics, and a SAFE FOR TELEGRAM badge.
+- Added a Learn tab with Forex tutoring: candlesticks, support/resistance, risk management rules, signal interpretation, and disclaimers.
+- Added ChartRenderer for PNG chart generation and TelegramNotifier.sendPhoto for picture-format signal delivery.
 - Added a signal-delivery policy unit test and bumped the Android version to 0.6.0 (versionCode 5).
 
 ## [0.5.0-dev] — offline instrument selector, CSV export and launcher icon (2026-11-17)

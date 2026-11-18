@@ -19,7 +19,9 @@ The repository still contains the FastAPI backend, React/TypeScript dashboard, K
 - UTC-complete candle aggregation and multi-timeframe assessment across 5m/15m/30m/1h/4h/1d. An available opposing higher-timeframe direction gates to WAIT; missing/neutral frames are disclosed but do not suppress a valid primary signal. Aggregation from incomplete source buckets abstains.
 - Native offline EMA 20/50 crossover backtest with ATR exits, explicit user price-unit spread/slippage/commission assumptions, same-bar stop-first handling, chronological 70/30 reporting, local Room history and equity-curve visualization. It is a baseline historical simulation, not a broker fill or account-currency model.
 - Generated launcher icon in Android adaptive and legacy density resources.
-- Optional background monitoring: WorkManager immediate + 15-minute periodic scans across all supported instruments on the selected timeframe, Yahoo snapshot refresh into Room, local notifications for new BUY/SELL states only, and optional Telegram delivery via a user-configured bot (Keystore-encrypted token, chat-ID discovery, test message). Android scheduling is best-effort under Doze/battery limits; Yahoo remains unofficial historical/reference data.
+- Optional background monitoring: WorkManager immediate + 15-minute periodic scans across all supported instruments on the selected timeframe, market-data snapshot refresh into Room, local notifications with app icon for new BUY/SELL states only, and optional Telegram delivery via a user-configured bot (Keystore-encrypted token, chat-ID discovery, test message). Telegram sends picture-format chart signals (PNG + caption) for safe setups only (R:R ≥ 2.0, evidence score ≥ 3, no conflicts). Android scheduling is best-effort under Doze/battery limits; market data remains unofficial historical/reference data.
+- Forex tutoring: Learn tab with lessons on candlesticks, support/resistance, risk management rules, signal interpretation, and disclaimers.
+- Google Drive backup: repository bundle and build info uploaded to user's Google Drive "GoldLens Backups" folder.
 
 ## Android capabilities not implemented or not verified
 
