@@ -3,9 +3,8 @@ package com.goldlens.analyst.notifications
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
 import com.goldlens.analyst.core.Candle
 
 /**
@@ -23,24 +22,27 @@ object ChartRenderer {
         style = Paint.Style.STROKE
         strokeWidth = 1f
     }
-    private val bullPaint = Paint().apply { color = Color.rgb(64, 201, 154); style = Paint.Style.FILL }
-    private val bearPaint = Paint().apply { color = Color.rgb(255, 119, 119); style = Paint.Style.FILL }
     private val textPaint = Paint().apply {
         color = Color.rgb(154, 164, 179)
         textSize = 14f
-        antiAlias = true
+        isAntiAlias = true
     }
     private val titlePaint = Paint().apply {
         color = Color.rgb(217, 180, 91)
         textSize = 18f
-        antiAlias = true
+        isAntiAlias = true
         textAlign = Paint.Align.LEFT
     }
     private val lastPricePaint = Paint().apply {
         color = Color.rgb(217, 180, 91)
         style = Paint.Style.STROKE
         strokeWidth = 1.5f
-        pathEffect = android.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 5f))
+        pathEffect = DashPathEffect(floatArrayOf(6f, 5f), 0f)
+    }
+    private val borderPaint = Paint().apply {
+        color = Color.rgb(58, 65, 77)
+        style = Paint.Style.STROKE
+        strokeWidth = 1f
     }
 
     fun render(
@@ -64,7 +66,6 @@ object ChartRenderer {
         val span = (hi - lo).coerceAtLeast(1e-9)
 
         fun y(v: Double): Float = (HEIGHT - PADDING - ((v - lo) / span * (HEIGHT - 2 * PADDING))).toFloat()
-        fun x(index: Int): Float = PADDING + (index / (visible.size - 1).coerceAtLeast(1).toFloat()) * (WIDTH - 2 * PADDING)
 
         // Draw grid lines
         val steps = 5
@@ -79,7 +80,10 @@ object ChartRenderer {
         // Draw zones
         zones?.forEach { zone ->
             val c = if (zone.side == "SUPPORT") Color.rgb(64, 201, 154) else Color.rgb(255, 119, 119)
-            val zonePaint = Paint().apply { color = c; alpha = 40 }
+            val zonePaint = Paint().apply {
+                color = c
+                alpha = 40
+            }
             val top = y(zone.upper)
             val bottom = y(zone.lower)
             canvas.drawRect(PADDING, top, WIDTH - PADDING, bottom, zonePaint)
@@ -89,14 +93,24 @@ object ChartRenderer {
         val step = (WIDTH - 2 * PADDING) / visible.size
         visible.forEachIndexed { index, candle ->
             val centerX = PADDING + index * step + step / 2f
-            val color = if (candle.close >= candle.open) Color.rgb(64, 201, 154) else Color.rgb(255, 119, 119)
+            val candleColor = if (candle.close >= candle.open) Color.rgb(64, 201, 154) else Color.rgb(255, 119, 119)
+            val wickPaint = Paint().apply {
+                color = candleColor
+                style = Paint.Style.STROKE
+                strokeWidth = 1.4f
+                isAntiAlias = true
+            }
+            val bodyPaint = Paint().apply {
+                color = candleColor
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
             // Wick
-            canvas.drawLine(centerX, y(candle.high), centerX, y(candle.low), bullPaint.apply { color = color; strokeWidth = 1.4f })
+            canvas.drawLine(centerX, y(candle.high), centerX, y(candle.low), wickPaint)
             // Body
             val top = y(maxOf(candle.open, candle.close))
             val bottom = y(minOf(candle.open, candle.close))
-            val bodyHeight = (bottom - top).coerceAtLeast(1f)
-            canvas.drawRect(centerX - step * 0.28f, top, centerX + step * 0.28f, bottom, bullPaint.apply { color = color })
+            canvas.drawRect(centerX - step * 0.28f, top, centerX + step * 0.28f, bottom, bodyPaint)
         }
 
         // Last price line
@@ -108,11 +122,6 @@ object ChartRenderer {
         }
 
         // Border
-        val borderPaint = Paint().apply {
-            color = Color.rgb(58, 65, 77)
-            style = Paint.Style.STROKE
-            strokeWidth = 1f
-        }
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), borderPaint)
 
         // Title
