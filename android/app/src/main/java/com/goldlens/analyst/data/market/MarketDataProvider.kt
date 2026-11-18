@@ -88,7 +88,10 @@ class YahooFinanceChartProvider(
         val meta = result.optJSONObject("meta") ?: JSONObject()
         val metaPrecision = meta.optInt("priceHint", -1).takeIf { it in 0..8 }
         val observedPrecision = InstrumentPrice.inferPrecision(normalized.flatMap { listOf(it.open, it.high, it.low, it.close) })
-        val sourcePrecision = listOfNotNull(metaPrecision, observedPrecision).maxOrNull()
+        // Yahoo's priceHint is its quote display precision; falling back to the OHLC-derived
+        // scale is useful for metals where the provider does not supply that hint. Forex
+        // presentation is instrument-fixed in InstrumentPrice and ignores this metadata.
+        val sourcePrecision = metaPrecision ?: observedPrecision
         val fetchedAtMillis = clockMillis()
         val sourceTimeframe = if (timeframe == "4h") "1h" else timeframe
         val closedSourceCandles = completeCandlesAt(normalized, sourceTimeframe, fetchedAtMillis)
@@ -101,7 +104,7 @@ class YahooFinanceChartProvider(
             timeframe = timeframe,
             candles = requestedCandles,
             source = DataSourceKind.HISTORICAL,
-            sourceLabel = "Historical chart archive · $displayName · ${meta.optString("symbol", ticker)}",
+            sourceLabel = "Yahoo Finance — historical/reference data · $displayName · ${meta.optString("symbol", ticker)}",
             fetchedAtMillis = fetchedAtMillis,
             sourcePrecision = sourcePrecision,
             providerReferencePrice = referencePrice,

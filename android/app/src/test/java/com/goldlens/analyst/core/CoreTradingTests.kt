@@ -97,15 +97,21 @@ not-a-time,1,2,0.5,1.5,3
         assertEquals("partial", result.agreement)
     }
 
-    @Test fun instrumentPriceFormattingUsesPairAndSourcePrecisionWithoutChangingPrices() {
-        assertEquals("1.23457", InstrumentPrice.format(1.234567, "EUR/USD"))
-        assertEquals("1.23456", InstrumentPrice.format(1.23456, "GBP/USD"))
-        assertEquals("150.123", InstrumentPrice.format(150.12345, "USD/JPY"))
-        assertEquals("18.12346", InstrumentPrice.format(18.123456, "USD/ZAR"))
-        assertEquals("2345.68", InstrumentPrice.format(2345.678, "XAU/USD"))
-        assertEquals("31.123", InstrumentPrice.format(31.123456, "XAG/USD"))
-        assertEquals("31.2", InstrumentPrice.format(31.2, "XAG/USD", sourcePrecision = 1))
-        assertEquals(1.234567, 1.234567, 0.0) // Display formatting is separate; callers retain the unrounded value.
+    @Test fun instrumentPriceFormattingUsesMt5PrecisionAndRetainsSourceNumbers() {
+        assertEquals("1.09820", InstrumentPrice.format(1.0982, "EUR/USD", sourcePrecision = 8))
+        assertEquals("1.09854", InstrumentPrice.format(1.09853888, "EUR/USD", sourcePrecision = 8))
+        assertEquals("1.23456", InstrumentPrice.format(1.23456, "GBP/USD", sourcePrecision = 8))
+        assertEquals("16.98290", InstrumentPrice.format(16.9829, "USD/ZAR", sourcePrecision = 8))
+        assertEquals("154.250", InstrumentPrice.format(154.25, "USD/JPY", sourcePrecision = 8))
+        assertEquals("160.125", InstrumentPrice.format(160.1254, "EUR/JPY", sourcePrecision = 8))
+        assertEquals("3778.16", InstrumentPrice.format(3778.16, "XAU/USD", sourcePrecision = 8))
+        assertEquals("48.325", InstrumentPrice.format(48.3251234, "XAG/USD", sourcePrecision = 3))
+        assertEquals("48.3251", InstrumentPrice.format(48.3251234, "XAG/USD", sourcePrecision = 4))
+
+        val unroundedSource = "1.09853888".toDouble()
+        assertEquals("1.09854", InstrumentPrice.format(unroundedSource, "EUR/USD"))
+        assertEquals(1.09853888, unroundedSource, 0.0)
+        assertEquals(1.09853888, Candle(1L, unroundedSource, 1.1, 1.09, unroundedSource).close, 0.0)
     }
 
     @Test fun instrumentPipDistancesUseForexPipsAndExplicitMetalPoints() {
@@ -117,14 +123,21 @@ not-a-time,1,2,0.5,1.5,3
         assertNull(InstrumentPrice.pointDistance("XAU/USD", 2_330.10, 2_329.50))
         assertEquals(60.0, InstrumentPrice.pointDistance("XAU/USD", 2_330.10, 2_329.50, 0.01)!!, 1e-8)
         assertEquals(123.0, InstrumentPrice.pointDistance("XAG/USD", 30.123, 30.000, 0.001)!!, 1e-8)
-        assertEquals("+0.00010 (1 pips)", InstrumentPrice.movement("EUR/USD", 1.1000, 1.1001, 5))
+        assertEquals("+0.00010 (1 pip)", InstrumentPrice.movement("EUR/USD", 1.1000, 1.1001, 5))
+        val entry = 1.09853888
+        val stop = 1.09988888
+        assertEquals(13.5, InstrumentPrice.pipDistance("EUR/USD", entry, stop)!!, 1e-8)
+        assertEquals("13.5 pips", InstrumentPrice.unitDistanceText("EUR/USD", entry, stop))
     }
 
-    @Test fun csvImportRetainsSourceDecimalPrecisionWithoutRoundingCandles() {
-        val csv = "timestamp,open,high,low,close,volume\n2025-01-01T00:00:00Z,1.2345,1.2356,1.2334,1.23456,10\n"
+    @Test fun csvImportRetainsFullForexPrecisionWhileDisplayUsesFivePlaces() {
+        val csv = "timestamp,open,high,low,close,volume\n2025-01-01T00:00:00Z,1.09820000,1.09990000,1.09750000,1.09853888,10\n"
         val parsed = CsvCandleParser.parse(csv)
-        assertEquals(5, parsed.sourcePrecision)
-        assertEquals(1.23456, parsed.candles.single().close, 0.0)
+        val close = parsed.candles.single().close
+        assertEquals(8, parsed.sourcePrecision)
+        assertEquals(1.09853888, close, 0.0)
+        assertEquals("1.09854", InstrumentPrice.format(close, "EUR/USD", parsed.sourcePrecision))
+        assertEquals(1.09853888, parsed.candles.single().close, 0.0)
     }
 
     @Test fun localCsvReportExportQuotesMultilineJournalNotesAndUsesUtc() {

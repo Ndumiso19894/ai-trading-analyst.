@@ -214,6 +214,7 @@ class FloatingAssistantService : Service() {
             withContext(Dispatchers.IO) { database.saveAnalysis(result.toEntity(), result.zones.map { it.zoneToEntity() }) }
             val summary = buildString {
                 append("${result.direction} · ${result.instrument} · ${result.timeframe} · ${result.reason}\n")
+                append("Source: ${dataset.sourceLabel}").appendLine()
                 append("Multi-timeframe: ${mtf.agreement} · ${mtf.explanation}").appendLine()
                 result.price?.let { append("Last saved candle close: ${format(it, result.instrument, dataset.sourcePrecision)}\n") }
                 result.stopLoss?.let {

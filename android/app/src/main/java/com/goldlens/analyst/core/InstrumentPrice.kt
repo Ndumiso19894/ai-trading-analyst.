@@ -8,7 +8,15 @@ import java.util.Locale
 object InstrumentPrice {
     fun precision(symbol: String, sourcePrecision: Int? = null): Int {
         require(sourcePrecision == null || sourcePrecision in 0..8) { "Source precision must be between 0 and 8 decimal places." }
-        return sourcePrecision ?: InstrumentRegistry.require(symbol).displayDecimals
+        val spec = InstrumentRegistry.require(symbol)
+        return when {
+            // FX quotes use normal broker/MT5 pip quotation precision, regardless of noisy
+            // provider numeric scales or the lexical precision of imported CSV values.
+            spec.assetClass == AssetClass.FOREX -> spec.displayDecimals
+            // Gold convention is two decimals; other metals may use the source's stated precision.
+            spec.symbol == "XAU/USD" -> 2
+            else -> maxOf(spec.displayDecimals, sourcePrecision ?: spec.displayDecimals)
+        }
     }
 
     fun format(value: Double, symbol: String, sourcePrecision: Int? = null): String {
@@ -53,9 +61,9 @@ object InstrumentPrice {
         val signed = if (delta > 0.0) "+" else if (delta < 0.0) "−" else ""
         val amount = format(kotlin.math.abs(delta), symbol, sourcePrecision)
         val pip = pipDistance(symbol, from, to)
-        if (pip != null) return "$signed$amount (${unitNumber(pip)} pips)"
+        if (pip != null) return "$signed$amount (${unitText(pip, "pip")})"
         val points = pointDistance(symbol, from, to, configuredPointSize)
-        if (points != null) return "$signed$amount (${unitNumber(points)} points)"
+        if (points != null) return "$signed$amount (${unitText(points, "point")})"
         val quoteCurrency = InstrumentRegistry.find(symbol)?.quoteCurrency ?: "price"
         return "$signed$amount $quoteCurrency price units"
     }
@@ -63,10 +71,15 @@ object InstrumentPrice {
     fun unitDistanceText(symbol: String, from: Double?, to: Double?, configuredPointSize: Double? = null): String? {
         if (from == null || to == null || !from.isFinite() || !to.isFinite()) return null
         val pips = pipDistance(symbol, from, to)
-        if (pips != null) return "${unitNumber(pips)} pips"
+        if (pips != null) return unitText(pips, "pip")
         val points = pointDistance(symbol, from, to, configuredPointSize)
-        if (points != null) return "${unitNumber(points)} points"
+        if (points != null) return unitText(points, "point")
         return null
+    }
+
+    private fun unitText(value: Double, singular: String): String {
+        val label = if (kotlin.math.abs(value - 1.0) < 1e-9) singular else "${singular}s"
+        return "${unitNumber(value)} $label"
     }
 
     private fun unitNumber(value: Double): String = String.format(Locale.US, "%.2f", value)
