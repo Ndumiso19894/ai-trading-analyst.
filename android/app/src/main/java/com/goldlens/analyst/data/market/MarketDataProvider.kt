@@ -45,8 +45,8 @@ class YahooFinanceChartProvider(
     private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     private val clockMillis: () -> Long = System::currentTimeMillis,
 ) : MarketDataProvider {
-    override val id = "yahoo-chart-unofficial"
-    override val displayName = "Yahoo Finance chart (unofficial; delay not guaranteed)"
+    override val id = "market-chart-unofficial"
+    override val displayName = "Market data chart (unofficial; delay not guaranteed)"
 
     override fun fetch(instrument: String, timeframe: String): ProviderMarketSnapshot {
         val (interval, range) = requestParameters(timeframe)
@@ -104,7 +104,7 @@ class YahooFinanceChartProvider(
             timeframe = timeframe,
             candles = requestedCandles,
             source = DataSourceKind.HISTORICAL,
-            sourceLabel = "Yahoo Finance — historical/reference data · $displayName · ${meta.optString("symbol", ticker)}",
+            sourceLabel = "Market data provider — historical/reference data · $displayName · ${meta.optString("symbol", ticker)}",
             fetchedAtMillis = fetchedAtMillis,
             sourcePrecision = sourcePrecision,
             providerReferencePrice = referencePrice,

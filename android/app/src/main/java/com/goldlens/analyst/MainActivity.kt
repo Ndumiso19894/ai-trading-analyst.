@@ -507,7 +507,7 @@ private fun GoldLensScreen(context: Context) {
             withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("instrument", instrument)) }
         }
     }
-    val tabs = listOf("Overview", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
+    val tabs = listOf("Overview", "Signals", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Gold, onPrimary = Color(0xFF17130A), secondary = Green,
@@ -556,16 +556,17 @@ private fun GoldLensScreen(context: Context) {
                                 }
                             },
                             onExport = { csvExportPicker.launch("goldlens-${instrument.replace('/', '-')}-${timeframe}.csv") },
-                            onAnalyze = ::analyzeOffline, onRisk = { tab = 5 })
-                        1 -> AnalysisTab(analysis, dataset, isBusy, multiTimeframe, configuredPointSize, ::analyzeOffline)
-                        2 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price, instrument, dataset?.sourcePrecision)
-                        3 -> BacktestTab(dataset, backtestReport, isBusy, ::runBacktest)
-                        4 -> ExportsTab(isBusy) { table ->
+                            onAnalyze = ::analyzeOffline, onRisk = { tab = 6 })
+                        1 -> SignalsTab(analysis, dataset, configuredPointSize, telegramConfigured, telegramEnabled, telegramStatus)
+                        2 -> AnalysisTab(analysis, dataset, isBusy, multiTimeframe, configuredPointSize, ::analyzeOffline)
+                        3 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price, instrument, dataset?.sourcePrecision)
+                        4 -> BacktestTab(dataset, backtestReport, isBusy, ::runBacktest)
+                        5 -> ExportsTab(isBusy) { table ->
                             exportTable = table
                             reportExportPicker.launch("goldlens-$table.csv")
                         }
-                        5 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk, instrument, configuredPointSize)
-                        6 -> JournalTab(database, timeframe, instrument, configuredPointSize)
+                        6 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk, instrument, configuredPointSize)
+                        7 -> JournalTab(database, timeframe, instrument, configuredPointSize)
                         else -> SettingsTab(
                             instrument = instrument,
                             metalPointSize = metalPointSize,
@@ -613,9 +614,9 @@ private fun OverviewTab(
     onExport: () -> Unit, onAnalyze: () -> Unit, onRisk: () -> Unit,
 ) {
     InstrumentPicker(instrument, onInstrument)
-    OutlinedButton(onClick = onFetchMarket, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-        Text(if (busy) "Fetching market data…" else "Fetch provider candles · Yahoo chart (unofficial)")
-    }
+        OutlinedButton(onClick = onFetchMarket, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text(if (busy) "Fetching market data…" else "Fetch provider candles · market data (unofficial)")
+        }
     providerSnapshot?.let { snapshot ->
         InfoCard(
             "${snapshot.sourceLabel}\n${snapshot.instrument} · ${snapshot.timeframe} · ${snapshot.candles.size} candles\nLast candle close: ${snapshot.candles.lastOrNull()?.let { formatPrice(it.close, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nProvider reference: ${snapshot.providerReferencePrice?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nBid / ask: ${snapshot.bid?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"} / ${snapshot.ask?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nLast candle timestamp: ${snapshot.candles.lastOrNull()?.let { java.time.Instant.ofEpochMilli(it.timestampMillis) } ?: "Unavailable"}\nProvider reference timestamp: ${snapshot.providerPriceTimestampMillis?.let { java.time.Instant.ofEpochMilli(it) } ?: "Unavailable"}\nFetched at: ${java.time.Instant.ofEpochMilli(snapshot.fetchedAtMillis)}\n${snapshot.note}",
@@ -649,6 +650,85 @@ private fun OverviewTab(
         if (analysis == null) InfoCard("Candles are loaded locally. Run Analyze locally to calculate indicators and levels.", Gold)
         else SignalSummary(analysis, dataset, configuredPointSize)
         OutlinedButton(onClick = onRisk, modifier = Modifier.fillMaxWidth()) { Text("Open risk calculator") }
+    }
+}
+
+@Composable
+private fun SignalsTab(
+    analysis: AnalysisResult?,
+    dataset: MarketDataset?,
+    configuredPointSize: Double?,
+    telegramConfigured: Boolean,
+    telegramEnabled: Boolean,
+    telegramStatus: String,
+) {
+    val isSafe = analysis != null &&
+        analysis.direction != Direction.WAIT &&
+        analysis.rewardRisk != null && analysis.rewardRisk >= 2.0 &&
+        analysis.score >= 3 && analysis.conflicts.isEmpty()
+
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Signals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gold)
+        Text("All supported instruments appear here. Only the safest setups — R:R ≥ 2.0, evidence score ≥ 3, no conflicting signals — are eligible for Telegram delivery.", color = Muted, style = MaterialTheme.typography.bodySmall)
+
+        if (analysis == null || dataset == null) {
+            InfoCard("No signal yet. Fetch provider candles or import an OHLC CSV on Overview, then run Analyze locally.", Gold)
+        } else {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(dataset.instrument, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Gold)
+                        Text(dataset.timeframe, style = MaterialTheme.typography.bodySmall, color = Muted)
+                    }
+                    val directionColor = when (analysis.direction) { Direction.BUY -> Green; Direction.SELL -> Red; Direction.WAIT -> Gold }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(analysis.direction.name, color = directionColor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        val safeBadge = if (isSafe) "SAFE FOR TELEGRAM" else "NOT TELEGRAM-SAFE"
+                        Text(safeBadge, color = if (isSafe) Green else Red, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Text(analysis.reason, color = Muted, style = MaterialTheme.typography.bodyMedium)
+
+                    Text("Why this market was chosen", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                    analysis.evidence.take(5).forEach { BulletLine(it, Green) }
+                    if (analysis.conflicts.isNotEmpty()) {
+                        Text("Cautions", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                        analysis.conflicts.take(5).forEach { BulletLine(it, Red) }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SmallMetric("Entry", analysis.entry, dataset.instrument, dataset.sourcePrecision, Modifier.weight(1f))
+                        SmallMetric("Stop", analysis.stopLoss, dataset.instrument, dataset.sourcePrecision, Modifier.weight(1f))
+                        SmallMetric("Target", analysis.takeProfit, dataset.instrument, dataset.sourcePrecision, Modifier.weight(1f))
+                        SmallMetric("R:R", analysis.rewardRisk, dataset.instrument, dataset.sourcePrecision, Modifier.weight(1f), priceValue = false)
+                    }
+                    Text("Evidence score ${analysis.score}; not a probability or a guarantee. This is analysis, not an order.", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text("Candle time: ${java.time.Instant.ofEpochMilli(analysis.timestampMillis ?: 0L)}", color = Muted, style = MaterialTheme.typography.labelSmall)
+
+                    if (!telegramConfigured || !telegramEnabled) {
+                        InfoCard("Telegram is not configured or disabled. Open Settings to add your bot token and chat ID. Only safe BUY/SELL signals will be sent.", Muted)
+                    } else if (!isSafe) {
+                        InfoCard("This signal is held back from Telegram — it does not meet the safety threshold (R:R ≥ 2.0, score ≥ 3, no conflicts). $telegramStatus", Muted)
+                    } else {
+                        Text("This signal qualifies for Telegram delivery.", color = Green, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        Text("All supported instruments", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+        InstrumentRegistry.instruments.forEach { inst ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text(inst.symbol, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = Color(0xFFE7EAF0))
+                    Text(inst.displayName, style = MaterialTheme.typography.labelSmall, color = Muted)
+                }
+                Text(if (inst.symbol == dataset?.instrument) analysis?.direction?.name ?: "—" else "—", style = MaterialTheme.typography.bodySmall, color = Muted)
+            }
+            Divider()
+        }
     }
 }
 
@@ -954,7 +1034,7 @@ private fun SettingsTab(
     else Button(onClick = onEnableOverlay, modifier = Modifier.fillMaxWidth()) { Text(if (overlayAllowed) "Start floating assistant" else "Grant permission and start") }
 
     Text("Background market monitoring", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-    InfoCard("GoldLens checks all ${InstrumentRegistry.instruments.size} supported instruments on the selected $instrument timeframe. WorkManager queues an immediate scan and repeats every 15 minutes when Android permits. Each scan replaces the stored candles for that instrument/timeframe with the latest Yahoo snapshot. Yahoo is unofficial historical/reference data and can be delayed or rate-limited; this is not a real-time or guaranteed alert service.", Gold)
+    InfoCard("GoldLens checks all ${InstrumentRegistry.instruments.size} supported instruments on the selected $instrument timeframe. WorkManager queues an immediate scan and repeats every 15 minutes when Android permits. Each scan replaces the stored candles for that instrument/timeframe with the latest provider snapshot. Provider data is historical/reference and can be delayed or rate-limited; this is not a real-time or guaranteed alert service.", Gold)
     Text(autoStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (autoMonitoring) OutlinedButton(onClick = onStopMonitoring, modifier = Modifier.weight(1f)) { Text("Stop background scans") }
@@ -963,7 +1043,7 @@ private fun SettingsTab(
     }
 
     Text("Telegram signal delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-    InfoCard("Create your own Telegram bot and enter its token here in GoldLens—never paste it into chat. The token is encrypted with Android Keystore on this device. Only new BUY/SELL signals are sent; WAIT results are suppressed. Telegram messages include Yahoo source caveats and do not place trades.", Muted)
+    InfoCard("Create your own Telegram bot and enter its token here in GoldLens—never paste it into chat. The token is encrypted with Android Keystore on this device. Only new BUY/SELL signals are sent; WAIT results are suppressed. Telegram messages include market-data source caveats and do not place trades.", Muted)
     OutlinedTextField(
         value = telegramTokenInput,
         onValueChange = { telegramTokenInput = it },

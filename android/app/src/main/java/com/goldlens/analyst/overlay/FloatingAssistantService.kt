@@ -295,7 +295,7 @@ class FloatingAssistantService : Service() {
         val stopIntent = PendingIntent.getService(this, 1, Intent(this, FloatingAssistantService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val openIntent = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("GoldLens floating assistant is active")
             .setContentText("Tap to return to GoldLens; stop it here or in Settings.")
             .setContentIntent(openIntent).setOngoing(true)

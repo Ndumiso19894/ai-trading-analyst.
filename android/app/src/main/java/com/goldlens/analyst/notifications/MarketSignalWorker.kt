@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.goldlens.analyst.R
 import com.goldlens.analyst.MainActivity
 import com.goldlens.analyst.core.AnalysisEngine
 import com.goldlens.analyst.core.Direction
@@ -116,7 +117,14 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         val token = if (prefs.getBoolean(KEY_TELEGRAM_ENABLED, false) && chatId.isNotBlank()) {
             TelegramTokenStore.load(applicationContext)
         } else null
-        if (token != null && SignalDeliveryPolicy.shouldDeliver(prefs.getString(telegramStateKey, null), result.direction)) {
+        // Only the safest signals go to Telegram: a new BUY/SELL direction with a favorable
+        // risk/reward ratio and enough supporting evidence. Lower-confidence signals still post
+        // a local notification but are kept out of Telegram.
+        val isSafeForTelegram = result.direction != Direction.WAIT &&
+            result.rewardRisk != null && result.rewardRisk >= 2.0 &&
+            result.score >= 3 && result.conflicts.isEmpty()
+        if (token != null && isSafeForTelegram &&
+            SignalDeliveryPolicy.shouldDeliver(prefs.getString(telegramStateKey, null), result.direction)) {
             try {
                 TelegramNotifier.sendMessage(token, chatId, text)
                 prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: last signal sent at ${Instant.now()}.").apply()
@@ -124,6 +132,8 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                 prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram delivery failed: ${error.message ?: "check token/chat ID and network"}").apply()
                 Log.w(TAG, "Telegram delivery failed for $symbol; will retry on a later scan.", error)
             }
+        } else if (token != null && !isSafeForTelegram && result.direction != Direction.WAIT) {
+            prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram: $symbol ${result.direction.name} signal held — not meeting safety threshold (R:R ≥ 2.0, score ≥ 3, no conflicts).").apply()
         }
     }
 
@@ -171,7 +181,7 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("GoldLens · $symbol · ${direction.name}")
                 .setContentText(text.lineSequence().drop(2).firstOrNull() ?: "New directional signal")
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text))
