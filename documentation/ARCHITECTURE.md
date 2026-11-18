@@ -45,6 +45,10 @@ The overlay requires Android's explicit overlay permission and user-started fore
 
 There is no Android MediaProjection workflow or validated chart OCR/vision. The optional backend screenshot endpoint decodes a bounded user-uploaded image, samples rough colors and abstains with WAIT. No exact prices/instrument/timeframe/structure are extracted.
 
-## Unimplemented cloud/background systems
+## Background monitoring and Telegram delivery
 
-No Google OAuth/Drive backup, GitHub snapshot sync, unified sync manager, WorkManager alerts or continuous background quote polling is implemented. Android periodic work, if added, must respect OS scheduling limits; no uninterrupted monitoring guarantee should be made.
+Android `MarketSignalWorker` (WorkManager) runs an immediate scan plus a 15-minute periodic scan across all supported instruments on the selected timeframe. Each scan fetches the Yahoo snapshot, analyzes it locally, persists new closed-candle sets/analyses to Room, and alerts only on new BUY/SELL directional states (WAIT and repeated same-direction scans are suppressed). Alerts are local notifications and, when enabled, Telegram Bot API messages to a user-configured chat. The bot token is encrypted with a non-exportable Android Keystore AES-GCM key and is never logged. Android scheduling is best-effort under Doze/battery limits; no uninterrupted monitoring guarantee is made, and Yahoo data remains unofficial historical/reference data.
+
+## Unimplemented cloud systems
+
+No Google OAuth/Drive backup, GitHub snapshot sync, or unified sync manager is implemented.

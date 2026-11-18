@@ -15,6 +15,7 @@ GoldLens is the existing Android-first analysis project with a native Kotlin/Com
 - Offline risk calculator for long and short positions, requiring user-supplied broker contract size or tick specifications; account currency conversion is not implemented.
 - User-started, draggable/expandable overlay analyzing locally saved candles with source provenance, explicit overlay permission and foreground notification.
 - User-started historical chart retrieval through an unofficial Yahoo Finance adapter. Provider identity, fetch time, candle timestamp and caveats are shown; data is not represented as guaranteed-live and bid/ask is never invented. Coverage and licensing are unverified.
+- Optional background monitoring (Settings): WorkManager scans all supported instruments every 15 minutes when Android permits, refreshes stored Yahoo snapshots, and posts local notifications for new BUY/SELL states only. Optional Telegram delivery sends the same new BUY/SELL signals to a user-configured bot; the token is encrypted with Android Keystore on-device. Background timing is best-effort under Doze/battery limits and Yahoo data remains unofficial historical/reference data, not a broker quote.
 - Strict complete-bucket UTC aggregation and multi-timeframe analysis: opposing available higher-timeframe directions gate to WAIT; missing/neutral frames are disclosed without suppressing a valid primary-timeframe signal. Analysis runs automatically after data import/fetch.
 - Offline EMA(20/50) crossover backtest with prior ATR exits, explicit user-entered costs, same-bar stop-first handling, 70/30 chronological reporting, local run history and equity curve. Results are per price unit and not broker fills or account-currency returns.
 - GoldLens launcher icon using Android adaptive and legacy launcher resources.
@@ -30,7 +31,7 @@ GoldLens is the existing Android-first analysis project with a native Kotlin/Com
 
 - Verified live/provider licensing and symbol coverage across the registry; genuine broker bid/ask/spread and source-mode comparison.
 - Android MediaProjection capture, crop/preview, genuine screenshot chart recognition, and desktop MT5 bridge.
-- Android WorkManager alerts, Google Drive OAuth/backup, GitHub data snapshots and unified sync manager.
+- Google Drive OAuth/backup, GitHub data snapshots and unified sync manager.
 - Multi-timeframe analysis from separate independent datasets; current aggregation is limited to complete bars from one selected source series.
 - Physical-device or emulator acceptance testing. GitHub CI verifies unit tests, compilation and APK packaging only.
 

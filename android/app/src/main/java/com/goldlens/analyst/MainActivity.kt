@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.goldlens.analyst.core.AnalysisEngine
 import com.goldlens.analyst.core.BacktestCosts
@@ -69,6 +70,10 @@ import com.goldlens.analyst.data.toEntity
 import com.goldlens.analyst.data.replaceCandleSet
 import com.goldlens.analyst.data.saveAnalysis
 import com.goldlens.analyst.overlay.FloatingAssistantService
+import com.goldlens.analyst.notifications.MarketSignalScheduler
+import com.goldlens.analyst.notifications.MarketSignalWorker
+import com.goldlens.analyst.notifications.TelegramNotifier
+import com.goldlens.analyst.notifications.TelegramTokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,6 +127,13 @@ private fun GoldLensScreen(context: Context) {
     var metalPointSize by remember(instrument) { mutableStateOf(prefs.getString("metal_point_size_$instrument", "") ?: "") }
     val configuredPointSize = metalPointSize.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
     var isBusy by remember { mutableStateOf(false) }
+    var autoMonitoring by remember { mutableStateOf(prefs.getBoolean(MarketSignalWorker.KEY_ENABLED, false)) }
+    var autoStatus by remember { mutableStateOf(prefs.getString(MarketSignalWorker.KEY_LAST_STATUS, "No background scan yet") ?: "No background scan yet") }
+    var telegramEnabled by remember { mutableStateOf(prefs.getBoolean(MarketSignalWorker.KEY_TELEGRAM_ENABLED, false)) }
+    var telegramChatId by remember { mutableStateOf(prefs.getString(MarketSignalWorker.KEY_TELEGRAM_CHAT, "") ?: "") }
+    var telegramStatus by remember { mutableStateOf(prefs.getString(MarketSignalWorker.KEY_TELEGRAM_STATUS, "Telegram is not configured") ?: "Telegram is not configured") }
+    var telegramConfigured by remember { mutableStateOf(TelegramTokenStore.hasToken(context) && telegramChatId.isNotBlank()) }
+    var telegramBusy by remember { mutableStateOf(false) }
     var exportTable by remember { mutableStateOf("journal") }
     var error by remember { mutableStateOf("") }
     var riskBalance by remember { mutableStateOf("") }
@@ -368,6 +380,101 @@ private fun GoldLensScreen(context: Context) {
         prefs.edit().putBoolean("overlay_running", false).apply()
     }
 
+    val scheduleMarketMonitoring = {
+        prefs.edit().putBoolean(MarketSignalWorker.KEY_ENABLED, true).apply()
+        MarketSignalScheduler.start(context)
+        autoMonitoring = true
+        autoStatus = "Scheduled every 15 minutes for all supported instruments · timeframe $timeframe. Android may defer background work."
+    }
+    val autoNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        scheduleMarketMonitoring()
+        if (!granted) autoStatus = "Background scans are scheduled, but Android notifications are disabled. Telegram delivery can still work."
+    }
+    fun startMarketMonitoring() {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            autoNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else scheduleMarketMonitoring()
+    }
+    fun stopMarketMonitoring() {
+        prefs.edit().putBoolean(MarketSignalWorker.KEY_ENABLED, false).apply()
+        MarketSignalScheduler.stop(context)
+        autoMonitoring = false
+        autoStatus = "Background market monitoring is stopped."
+    }
+    fun refreshAutoStatus() {
+        autoStatus = prefs.getString(MarketSignalWorker.KEY_LAST_STATUS, "No background scan yet") ?: "No background scan yet"
+        telegramStatus = prefs.getString(MarketSignalWorker.KEY_TELEGRAM_STATUS, "Telegram is not configured") ?: "Telegram is not configured"
+    }
+    fun saveTelegramSettings(tokenInput: String, chatIdInput: String, enabled: Boolean): String {
+        return try {
+            val cleanToken = tokenInput.trim()
+            val cleanChatId = chatIdInput.trim()
+            if (cleanToken.isNotEmpty()) TelegramTokenStore.save(context, cleanToken)
+            val hasToken = TelegramTokenStore.hasToken(context)
+            require(!enabled || hasToken) { "Enter a bot token before enabling Telegram signals." }
+            require(!enabled || cleanChatId.isNotBlank()) { "Enter the Telegram chat ID before enabling Telegram signals." }
+            prefs.edit()
+                .putString(MarketSignalWorker.KEY_TELEGRAM_CHAT, cleanChatId)
+                .putBoolean(MarketSignalWorker.KEY_TELEGRAM_ENABLED, enabled)
+                .apply()
+            telegramChatId = cleanChatId
+            telegramEnabled = enabled
+            telegramConfigured = hasToken && cleanChatId.isNotBlank()
+            telegramStatus = if (enabled) "Telegram is configured; only new BUY/SELL signals will be sent." else "Telegram signal delivery is off."
+            prefs.edit().putString(MarketSignalWorker.KEY_TELEGRAM_STATUS, telegramStatus).apply()
+            "Saved. $telegramStatus"
+        } catch (e: Exception) {
+            e.message ?: "Could not save Telegram settings."
+        }
+    }
+    fun testTelegram(tokenInput: String, chatIdInput: String) {
+        scope.launch {
+            telegramBusy = true
+            telegramStatus = "Sending Telegram test message…"
+            try {
+                val token = tokenInput.trim().takeIf(String::isNotEmpty)?.also { TelegramTokenStore.save(context, it) }
+                    ?: TelegramTokenStore.load(context)
+                    ?: throw IllegalArgumentException("Enter and save your bot token first.")
+                val chat = chatIdInput.trim().ifBlank { telegramChatId }
+                require(chat.isNotBlank()) { "Enter the Telegram chat ID first." }
+                withContext(Dispatchers.IO) {
+                    TelegramNotifier.sendMessage(token, chat, "GoldLens Telegram test: connection works. Auto alerts will include new BUY/SELL signals only.")
+                }
+                prefs.edit().putString(MarketSignalWorker.KEY_TELEGRAM_CHAT, chat).apply()
+                telegramChatId = chat
+                telegramConfigured = true
+                telegramStatus = "Telegram test message sent successfully. Save settings to enable automatic alerts."
+            } catch (e: Exception) {
+                telegramStatus = e.message ?: "Telegram test failed; check the token, chat ID, and connection."
+            } finally { telegramBusy = false }
+        }
+    }
+    fun findTelegramChat(tokenInput: String) {
+        scope.launch {
+            telegramBusy = true
+            telegramStatus = "Finding the most recent chat for your bot…"
+            try {
+                val token = tokenInput.trim().takeIf(String::isNotEmpty)?.also { TelegramTokenStore.save(context, it) }
+                    ?: TelegramTokenStore.load(context)
+                    ?: throw IllegalArgumentException("Enter the bot token first.")
+                val chat = withContext(Dispatchers.IO) { TelegramNotifier.findLatestChatId(token) }
+                telegramChatId = chat
+                prefs.edit().putString(MarketSignalWorker.KEY_TELEGRAM_CHAT, chat).apply()
+                telegramConfigured = true
+                telegramStatus = "Found chat ID $chat. Save settings, then send a test message."
+            } catch (e: Exception) {
+                telegramStatus = e.message ?: "Could not find a Telegram chat."
+            } finally { telegramBusy = false }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        // WorkManager work can be dropped by force-stop/reboot handling; re-queue the periodic
+        // scan (without an immediate run) whenever the user previously enabled monitoring.
+        if (prefs.getBoolean(MarketSignalWorker.KEY_ENABLED, false)) {
+            runCatching { MarketSignalScheduler.resumePeriodic(context) }
+        }
+    }
     LaunchedEffect(database) {
         try {
             val settings = withContext(Dispatchers.IO) {
@@ -459,7 +566,38 @@ private fun GoldLensScreen(context: Context) {
                         }
                         5 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk, instrument, configuredPointSize)
                         6 -> JournalTab(database, timeframe, instrument, configuredPointSize)
-                        else -> SettingsTab(instrument, metalPointSize, { metalPointSize = it; prefs.edit().putString("metal_point_size_$instrument", it).apply() }, backendUrl, { backendUrl = it; prefs.edit().putString("backend_url", it).apply(); scope.launch(Dispatchers.IO) { database.settingDao().put(SettingEntity("backend_url", it)) } }, backendState, backendResponse, isBusy, overlayAllowed, overlayRunning, ::enableOverlay, ::disableOverlay, { request("/health") }, { request("/api/market/candles?timeframe=$timeframe&period=5d") }, { request("/api/analysis?timeframe=$timeframe&period=3mo") }, { request("/api/signals") }, { screenshotPicker.launch("image/*") })
+                        else -> SettingsTab(
+                            instrument = instrument,
+                            metalPointSize = metalPointSize,
+                            onMetalPointSize = { metalPointSize = it; prefs.edit().putString("metal_point_size_$instrument", it).apply() },
+                            url = backendUrl,
+                            onUrl = { backendUrl = it; prefs.edit().putString("backend_url", it).apply(); scope.launch(Dispatchers.IO) { database.settingDao().put(SettingEntity("backend_url", it)) } },
+                            connection = backendState,
+                            response = backendResponse,
+                            busy = isBusy,
+                            overlayAllowed = overlayAllowed,
+                            overlayRunning = overlayRunning,
+                            onEnableOverlay = ::enableOverlay,
+                            onDisableOverlay = ::disableOverlay,
+                            onHealth = { request("/health") },
+                            onMarket = { request("/api/market/candles?timeframe=$timeframe&period=5d") },
+                            onAnalysis = { request("/api/analysis?timeframe=$timeframe&period=3mo") },
+                            onHistory = { request("/api/signals") },
+                            onScreenshot = { screenshotPicker.launch("image/*") },
+                            autoMonitoring = autoMonitoring,
+                            autoStatus = autoStatus,
+                            onStartMonitoring = ::startMarketMonitoring,
+                            onStopMonitoring = ::stopMarketMonitoring,
+                            onRefreshAutoStatus = ::refreshAutoStatus,
+                            telegramConfigured = telegramConfigured,
+                            telegramEnabled = telegramEnabled,
+                            telegramChatId = telegramChatId,
+                            telegramStatus = telegramStatus,
+                            telegramBusy = telegramBusy,
+                            onSaveTelegram = ::saveTelegramSettings,
+                            onTestTelegram = ::testTelegram,
+                            onFindTelegramChat = ::findTelegramChat,
+                        )
                     }
                 }
             }
@@ -795,7 +933,15 @@ private fun SettingsTab(
     url: String, onUrl: (String) -> Unit, connection: String, response: String, busy: Boolean,
     overlayAllowed: Boolean, overlayRunning: Boolean, onEnableOverlay: () -> Unit, onDisableOverlay: () -> Unit,
     onHealth: () -> Unit, onMarket: () -> Unit, onAnalysis: () -> Unit, onHistory: () -> Unit, onScreenshot: () -> Unit,
+    autoMonitoring: Boolean, autoStatus: String, onStartMonitoring: () -> Unit, onStopMonitoring: () -> Unit, onRefreshAutoStatus: () -> Unit,
+    telegramConfigured: Boolean, telegramEnabled: Boolean, telegramChatId: String, telegramStatus: String, telegramBusy: Boolean,
+    onSaveTelegram: (String, String, Boolean) -> String, onTestTelegram: (String, String) -> Unit,
+    onFindTelegramChat: (String) -> Unit,
 ) {
+    var telegramTokenInput by remember { mutableStateOf("") }
+    var telegramChatInput by remember(telegramChatId) { mutableStateOf(telegramChatId) }
+    var telegramToggle by remember(telegramEnabled) { mutableStateOf(telegramEnabled) }
+    var telegramFormStatus by remember { mutableStateOf("") }
     InfoCard("Offline CSV analysis and risk tools do not require this optional API. Enter a real verified HTTPS endpoint only if you have one.", Gold)
     if (InstrumentRegistry.find(instrument)?.assetClass == com.goldlens.analyst.core.AssetClass.PRECIOUS_METAL) {
         NumericField("$instrument display point size · optional", metalPointSize, onMetalPointSize)
@@ -806,6 +952,45 @@ private fun SettingsTab(
     Text("Overlay permission: ${if (overlayAllowed) "Allowed" else "Not granted"} · Service: ${if (overlayRunning) "Running" else "Stopped"}", color = if (overlayAllowed && overlayRunning) Green else Muted)
     if (overlayRunning) OutlinedButton(onClick = onDisableOverlay, modifier = Modifier.fillMaxWidth()) { Text("Stop floating assistant") }
     else Button(onClick = onEnableOverlay, modifier = Modifier.fillMaxWidth()) { Text(if (overlayAllowed) "Start floating assistant" else "Grant permission and start") }
+
+    Text("Background market monitoring", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    InfoCard("GoldLens checks all ${InstrumentRegistry.instruments.size} supported instruments on the selected $instrument timeframe. WorkManager queues an immediate scan and repeats every 15 minutes when Android permits. Each scan replaces the stored candles for that instrument/timeframe with the latest Yahoo snapshot. Yahoo is unofficial historical/reference data and can be delayed or rate-limited; this is not a real-time or guaranteed alert service.", Gold)
+    Text(autoStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (autoMonitoring) OutlinedButton(onClick = onStopMonitoring, modifier = Modifier.weight(1f)) { Text("Stop background scans") }
+        else Button(onClick = onStartMonitoring, modifier = Modifier.weight(1f)) { Text("Start background scans") }
+        OutlinedButton(onClick = onRefreshAutoStatus, modifier = Modifier.weight(1f)) { Text("Refresh status") }
+    }
+
+    Text("Telegram signal delivery", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    InfoCard("Create your own Telegram bot and enter its token here in GoldLens—never paste it into chat. The token is encrypted with Android Keystore on this device. Only new BUY/SELL signals are sent; WAIT results are suppressed. Telegram messages include Yahoo source caveats and do not place trades.", Muted)
+    OutlinedTextField(
+        value = telegramTokenInput,
+        onValueChange = { telegramTokenInput = it },
+        label = { Text(if (telegramConfigured) "Bot token (saved; enter to replace)" else "Telegram bot token") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(value = telegramChatInput, onValueChange = { telegramChatInput = it }, label = { Text("Telegram chat ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+        Text("Send new BUY/SELL signals to Telegram")
+        Switch(checked = telegramToggle, onCheckedChange = { telegramToggle = it })
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            telegramFormStatus = onSaveTelegram(telegramTokenInput, telegramChatInput, telegramToggle)
+            if (telegramFormStatus.startsWith("Saved")) telegramTokenInput = ""
+        }, modifier = Modifier.weight(1f)) { Text("Save Telegram settings") }
+        OutlinedButton(onClick = { onTestTelegram(telegramTokenInput, telegramChatInput) }, enabled = !telegramBusy, modifier = Modifier.weight(1f)) { Text(if (telegramBusy) "Sending…" else "Send test message") }
+    }
+    OutlinedButton(onClick = { onFindTelegramChat(telegramTokenInput) }, enabled = !telegramBusy, modifier = Modifier.fillMaxWidth()) {
+        Text("Find chat ID from my bot messages")
+    }
+    Text("To use this, open your bot in Telegram, press Start, and send it any message first. GoldLens then reads the latest chat ID from Telegram updates.", color = Muted, style = MaterialTheme.typography.bodySmall)
+    Text(if (telegramFormStatus.isNotBlank()) telegramFormStatus else telegramStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
+
     OutlinedTextField(value = url, onValueChange = onUrl, label = { Text("Optional backend HTTPS URL") }, placeholder = { Text("https://your-api.example") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     Text(connection, color = Muted)
     Button(onClick = onHealth, enabled = !busy && url.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Test API connection") }

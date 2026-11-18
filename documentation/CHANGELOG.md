@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.0-dev] — background monitoring and Telegram signal delivery (2026-11-17)
+- Added WorkManager background scans (immediate + every 15 minutes when Android permits) across all supported instruments on the selected timeframe, refreshing stored Yahoo snapshots and posting local notifications for new BUY/SELL states only.
+- Added optional Telegram delivery: user-configured bot token encrypted with Android Keystore AES-GCM, chat-ID discovery from bot messages, test message, and deduplicated BUY/SELL-only alerts with Yahoo source caveats.
+- Added a signal-delivery policy unit test and bumped the Android version to 0.6.0 (versionCode 5).
+
 ## [0.5.0-dev] — offline instrument selector, CSV export and launcher icon (2026-11-17)
 - Added selectable FX and precious-metal instrument registry with broker-specific tick/lot details left unset until verified.
 - Candle persistence and analysis now retain the selected symbol; switching instrument/timeframe reloads only its saved local data rather than relabeling another dataset.

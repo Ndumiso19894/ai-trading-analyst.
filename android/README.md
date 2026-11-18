@@ -8,6 +8,21 @@ Overview has a user-started Yahoo Finance chart request, implemented behind a re
 
 Multi-timeframe views use UTC-aligned aggregation only when every source candle in a target bucket exists. No finer bars are synthesized. A genuinely opposing available higher-timeframe direction gates the setup to WAIT. Missing or neutral higher frames are called out in the signal explanation but do not erase a valid primary-timeframe BUY/SELL signal; provider-source analysis still waits on stale/future candles. Signals are calculated automatically after CSV import or provider fetch and can be recalculated manually. BUY/SELL cards show the reason, supporting evidence, cautions, candle age, and theoretical entry/stop/target method; WAIT explains why no setup was issued. The full trend assessment needs at least 200 valid candles. Evidence score is not a probability, and levels are not broker-specific trade instructions. Historical CSV data can still be analyzed without a current-data freshness claim.
 
+## Background monitoring and Telegram alerts
+
+Settings → Background market monitoring starts a WorkManager scan: an immediate run plus a periodic run every 15 minutes (Android's minimum periodic interval) across all supported instruments on the currently selected timeframe. Each scan fetches the Yahoo chart snapshot, analyzes it locally, and—when a new closed candle appears—replaces the stored candles and saves the analysis in Room. Android may defer or batch background work (Doze, battery optimization, OEM task killers), so scans are best-effort and never guaranteed at exact 15-minute marks. Yahoo data remains unofficial historical/reference data: it can be delayed, rate-limited, or unavailable for some symbols, and it is not an executable broker quote.
+
+Only new directional states are alerted: when an instrument/timeframe moves from WAIT (or the opposite direction) into BUY or SELL, GoldLens posts a local notification and, if enabled, sends a Telegram message. Repeated scans with the same direction are suppressed, and WAIT results are never sent. Telegram messages include the Yahoo source caveat, formatted entry/stop/target levels, and the closed-candle timestamp; they never place trades.
+
+To enable Telegram delivery:
+
+1. In Telegram, open `@BotFather`, send `/newbot`, and copy the bot token.
+2. Open your new bot, press Start, and send it any message.
+3. In GoldLens Settings, paste the token (it is encrypted with an Android Keystore AES-GCM key on this device and never logged), then tap "Find chat ID from my bot messages" or enter the chat ID manually.
+4. Turn on "Send new BUY/SELL signals to Telegram", tap "Save Telegram settings", then "Send test message" to verify delivery.
+
+Never paste the bot token into chat or commit it to source control. If the token is lost or revoked in BotFather, enter a new one in Settings; the old encrypted copy is replaced.
+
 ## Backtesting limits
 
 The offline EMA(20/50) crossover baseline enters at the next bar open, uses prior-bar ATR for 1.5 ATR stops and 3 ATR targets, checks same-bar exits conservatively (stop first), and reports a chronological 70/30 split. Spread, slippage and commission are explicit user-entered price-unit assumptions. Metrics are per price unit—not account currency, a broker fill model, or a forecast. It does not model lot size, FX conversion, funding, margin, variable spread, market impact or corporate/broker execution rules. Backtest runs are stored locally.

@@ -1,0 +1,200 @@
+package com.goldlens.analyst.notifications
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import com.goldlens.analyst.MainActivity
+import com.goldlens.analyst.core.AnalysisEngine
+import com.goldlens.analyst.core.Direction
+import com.goldlens.analyst.core.InstrumentPrice
+import com.goldlens.analyst.core.InstrumentRegistry
+import com.goldlens.analyst.core.MarketDataset
+import com.goldlens.analyst.core.MultiTimeframeAnalyzer
+import com.goldlens.analyst.data.GoldLensDatabase
+import com.goldlens.analyst.data.replaceCandleSet
+import com.goldlens.analyst.data.saveAnalysis
+import com.goldlens.analyst.data.toEntity
+import com.goldlens.analyst.data.market.YahooFinanceChartProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.time.Instant
+
+class MarketSignalWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_ENABLED, false)) return@withContext Result.success()
+
+        val timeframe = prefs.getString("timeframe", "1h") ?: "1h"
+        val provider = YahooFinanceChartProvider()
+        val database = GoldLensDatabase.get(applicationContext)
+        var fetched = 0
+        var failures = 0
+        val failureNotes = mutableListOf<String>()
+
+        for (instrument in InstrumentRegistry.instruments) {
+            if (!prefs.getBoolean(KEY_ENABLED, false)) break
+            try {
+                val snapshot = provider.fetch(instrument.symbol, timeframe)
+                val dataset = MarketDataset(
+                    candles = snapshot.candles,
+                    source = snapshot.source,
+                    sourceLabel = snapshot.sourceLabel,
+                    timeframe = timeframe,
+                    loadedAtMillis = snapshot.fetchedAtMillis,
+                    instrument = instrument.symbol,
+                    sourcePrecision = snapshot.sourcePrecision,
+                )
+                val result = withContext(Dispatchers.Default) {
+                    val base = AnalysisEngine.analyze(dataset)
+                    MultiTimeframeAnalyzer.applyGate(base, MultiTimeframeAnalyzer.analyze(dataset))
+                }
+
+                val latestPersisted = database.candleDao().latest(instrument.symbol, timeframe, 1).firstOrNull()
+                val lastCandleMillis = snapshot.candles.lastOrNull()?.timestampMillis
+                val newClosedCandle = lastCandleMillis != null && latestPersisted?.timestampMillis != lastCandleMillis
+                if (newClosedCandle) {
+                    database.replaceCandleSet(
+                        timeframe, snapshot.candles, instrument.symbol, snapshot.source,
+                        snapshot.sourceLabel, snapshot.sourcePrecision,
+                    )
+                    database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() })
+                }
+
+                deliverSignal(instrument.symbol, timeframe, result, dataset, prefs)
+                fetched++
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                failures++
+                failureNotes += "${instrument.symbol}: ${error.message ?: "unavailable"}"
+                Log.w(TAG, "Background scan failed for ${instrument.symbol}: ${error.message}")
+            }
+        }
+
+        val summary = "Background scan ${Instant.now()} · refreshed $fetched/${InstrumentRegistry.instruments.size} instruments · $failures unavailable · $timeframe"
+        prefs.edit().putString(KEY_LAST_STATUS, summary).apply()
+        if (fetched == 0) {
+            Log.w(TAG, "No market symbols refreshed: ${failureNotes.take(3).joinToString()}")
+        }
+        // Keep the periodic cadence stable; one unavailable symbol must not trigger an immediate
+        // retry of all 14 requests and increase the chance of provider throttling.
+        Result.success()
+    }
+
+    private fun deliverSignal(
+        symbol: String,
+        timeframe: String,
+        result: com.goldlens.analyst.core.AnalysisResult,
+        dataset: MarketDataset,
+        prefs: android.content.SharedPreferences,
+    ) {
+        val pairKey = "${symbol.replace('/', '_')}_${timeframe}"
+        val localStateKey = "local_direction_$pairKey"
+        val telegramStateKey = "telegram_direction_$pairKey"
+        if (result.direction == Direction.WAIT) {
+            prefs.edit().putString(localStateKey, Direction.WAIT.name).apply()
+            if (prefs.getBoolean(KEY_TELEGRAM_ENABLED, false)) prefs.edit().putString(telegramStateKey, Direction.WAIT.name).apply()
+            return
+        }
+        val text = signalMessage(symbol, timeframe, result, dataset, prefs)
+
+        if (SignalDeliveryPolicy.shouldDeliver(prefs.getString(localStateKey, null), result.direction) && postLocalNotification(symbol, timeframe, result.direction, text)) {
+            prefs.edit().putString(localStateKey, result.direction.name).apply()
+        }
+
+        val chatId = prefs.getString(KEY_TELEGRAM_CHAT, "")?.trim().orEmpty()
+        val token = if (prefs.getBoolean(KEY_TELEGRAM_ENABLED, false) && chatId.isNotBlank()) {
+            TelegramTokenStore.load(applicationContext)
+        } else null
+        if (token != null && SignalDeliveryPolicy.shouldDeliver(prefs.getString(telegramStateKey, null), result.direction)) {
+            try {
+                TelegramNotifier.sendMessage(token, chatId, text)
+                prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: last signal sent at ${Instant.now()}.").apply()
+            } catch (error: Exception) {
+                prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram delivery failed: ${error.message ?: "check token/chat ID and network"}").apply()
+                Log.w(TAG, "Telegram delivery failed for $symbol; will retry on a later scan.", error)
+            }
+        }
+    }
+
+    private fun signalMessage(
+        symbol: String,
+        timeframe: String,
+        result: com.goldlens.analyst.core.AnalysisResult,
+        dataset: MarketDataset,
+        prefs: android.content.SharedPreferences,
+    ): String = buildString {
+        append("GoldLens signal · ${result.direction.name}\n")
+        append("$symbol · $timeframe\n")
+        append("Source: ${dataset.sourceLabel} (historical/reference data, not a broker quote)\n")
+        result.price?.let { append("Last candle close: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+        result.entry?.let { append("Entry: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+        result.stopLoss?.let {
+            val pointSize = prefs.getString("metal_point_size_$symbol", "")?.toDoubleOrNull()
+            val distance = InstrumentPrice.unitDistanceText(symbol, result.entry, it, pointSize)
+            append("Stop: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}")
+            if (distance != null) append(" · Stop distance: $distance")
+            appendLine()
+        }
+        result.takeProfit?.let {
+            val pointSize = prefs.getString("metal_point_size_$symbol", "")?.toDoubleOrNull()
+            val distance = InstrumentPrice.unitDistanceText(symbol, result.entry, it, pointSize)
+            append("Target: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}")
+            if (distance != null) append(" · Target distance: $distance")
+            appendLine()
+        }
+        append("Closed candle: ${result.timestampMillis?.let { Instant.ofEpochMilli(it) } ?: "unknown"}\n")
+        append(result.reason)
+    }
+
+    private fun postLocalNotification(symbol: String, timeframe: String, direction: Direction, text: String): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
+        return try {
+            val manager = applicationContext.getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26) {
+                manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "GoldLens market signals", NotificationManager.IMPORTANCE_DEFAULT))
+            }
+            val openIntent = PendingIntent.getActivity(
+                applicationContext,
+                (symbol + timeframe).hashCode(),
+                Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("GoldLens · $symbol · ${direction.name}")
+                .setContentText(text.lineSequence().drop(2).firstOrNull() ?: "New directional signal")
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(openIntent)
+                .setAutoCancel(true)
+                .build()
+            NotificationManagerCompat.from(applicationContext).notify((symbol + timeframe).hashCode(), notification)
+            true
+        } catch (error: SecurityException) {
+            false
+        }
+    }
+
+    companion object {
+        const val PREFS = "goldlens-settings"
+        const val KEY_ENABLED = "auto_monitoring_enabled"
+        const val KEY_LAST_STATUS = "auto_monitoring_last_status"
+        const val KEY_TELEGRAM_CHAT = "telegram_chat_id"
+        const val KEY_TELEGRAM_ENABLED = "telegram_enabled"
+        const val KEY_TELEGRAM_STATUS = "telegram_status"
+        const val PERIODIC_WORK = "goldlens_market_signal_periodic"
+        const val IMMEDIATE_WORK = "goldlens_market_signal_now"
+        private const val TAG = "GoldLensAutoScan"
+        private const val CHANNEL_ID = "goldlens_market_signals"
+    }
+}

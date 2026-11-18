@@ -2,6 +2,7 @@ package com.goldlens.analyst.core
 
 import com.goldlens.analyst.data.CsvReportExporter
 import com.goldlens.analyst.data.JournalEntity
+import com.goldlens.analyst.notifications.SignalDeliveryPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,6 +17,14 @@ class CoreTradingTests {
         val high = maxOf(open, close) + 0.6 + (i % 5) * 0.03
         val low = minOf(open, close) - 0.5 - (i % 3) * 0.02
         Candle(1_735_689_600_000L + i * 3_600_000L, open, high, low, close, 100.0 + i)
+    }
+
+    @Test fun backgroundSignalPolicyOnlySendsNewDirectionalStates() {
+        assertTrue(SignalDeliveryPolicy.shouldDeliver(null, Direction.BUY))
+        assertFalse(SignalDeliveryPolicy.shouldDeliver("BUY", Direction.BUY))
+        assertTrue(SignalDeliveryPolicy.shouldDeliver("WAIT", Direction.BUY))
+        assertTrue(SignalDeliveryPolicy.shouldDeliver("BUY", Direction.SELL))
+        assertFalse(SignalDeliveryPolicy.shouldDeliver("SELL", Direction.WAIT))
     }
 
     @Test fun indicatorsMatchPythonPandasReferenceFixture() {
