@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -15,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.goldlens.analyst.R
+import com.goldlens.analyst.notifications.ChartRenderer.ZoneRect
 import com.goldlens.analyst.MainActivity
 import com.goldlens.analyst.core.AnalysisEngine
 import com.goldlens.analyst.core.Direction
@@ -126,11 +128,39 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         if (token != null && isSafeForTelegram &&
             SignalDeliveryPolicy.shouldDeliver(prefs.getString(telegramStateKey, null), result.direction)) {
             try {
-                TelegramNotifier.sendMessage(token, chatId, text)
-                prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: last signal sent at ${Instant.now()}.").apply()
+                val zoneRects = result.zones.map { zone ->
+                    ZoneRect(zone.side.name, zone.lower, zone.upper)
+                }
+                val chartBitmap = ChartRenderer.render(
+                    candles = dataset.candles,
+                    symbol = symbol,
+                    timeframe = timeframe,
+                    direction = result.direction.name,
+                    lastPrice = result.price,
+                    zones = zoneRects,
+                )
+                val pngBytes = ChartRenderer.bitmapToPngBytes(chartBitmap)
+                val caption = buildString {
+                    append("GoldLens signal · ${result.direction.name}\n")
+                    append("$symbol · $timeframe\n")
+                    result.price?.let { append("Close: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+                    result.entry?.let { append("Entry: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+                    result.stopLoss?.let { append("Stop: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+                    result.takeProfit?.let { append("Target: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
+                    append("R:R ${result.rewardRisk?.let { "%.2f".format(it) } ?: "—"} · Score ${result.score}\n")
+                    append(result.reason)
+                }
+                TelegramNotifier.sendPhoto(token, chatId, pngBytes, caption.toString())
+                prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: chart signal sent at ${Instant.now()}.").apply()
             } catch (error: Exception) {
-                prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram delivery failed: ${error.message ?: "check token/chat ID and network"}").apply()
-                Log.w(TAG, "Telegram delivery failed for $symbol; will retry on a later scan.", error)
+                prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram chart failed: ${error.message ?: "check token/chat ID and network"}; falling back to text.").apply()
+                try {
+                    TelegramNotifier.sendMessage(token, chatId, text)
+                    prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: text signal sent at ${Instant.now()}.").apply()
+                } catch (textError: Exception) {
+                    prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram delivery failed: ${textError.message ?: "check token/chat ID and network"}").apply()
+                    Log.w(TAG, "Telegram delivery failed for $symbol; will retry on a later scan.", error)
+                }
             }
         } else if (token != null && !isSafeForTelegram && result.direction != Direction.WAIT) {
             prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram: $symbol ${result.direction.name} signal held — not meeting safety threshold (R:R ≥ 2.0, score ≥ 3, no conflicts).").apply()

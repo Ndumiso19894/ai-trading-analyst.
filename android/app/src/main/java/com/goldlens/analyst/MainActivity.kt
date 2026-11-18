@@ -507,7 +507,7 @@ private fun GoldLensScreen(context: Context) {
             withContext(Dispatchers.IO) { database.settingDao().put(SettingEntity("instrument", instrument)) }
         }
     }
-    val tabs = listOf("Overview", "Signals", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
+    val tabs = listOf("Overview", "Signals", "Learn", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Gold, onPrimary = Color(0xFF17130A), secondary = Green,
@@ -558,15 +558,16 @@ private fun GoldLensScreen(context: Context) {
                             onExport = { csvExportPicker.launch("goldlens-${instrument.replace('/', '-')}-${timeframe}.csv") },
                             onAnalyze = ::analyzeOffline, onRisk = { tab = 6 })
                         1 -> SignalsTab(analysis, dataset, configuredPointSize, telegramConfigured, telegramEnabled, telegramStatus)
-                        2 -> AnalysisTab(analysis, dataset, isBusy, multiTimeframe, configuredPointSize, ::analyzeOffline)
-                        3 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price, instrument, dataset?.sourcePrecision)
-                        4 -> BacktestTab(dataset, backtestReport, isBusy, ::runBacktest)
-                        5 -> ExportsTab(isBusy) { table ->
+                        2 -> LearnTab()
+                        3 -> AnalysisTab(analysis, dataset, isBusy, multiTimeframe, configuredPointSize, ::analyzeOffline)
+                        4 -> ZonesTab(analysis?.zones.orEmpty(), dataset?.candles.orEmpty(), analysis?.price, instrument, dataset?.sourcePrecision)
+                        5 -> BacktestTab(dataset, backtestReport, isBusy, ::runBacktest)
+                        6 -> ExportsTab(isBusy) { table ->
                             exportTable = table
                             reportExportPicker.launch("goldlens-$table.csv")
                         }
-                        6 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk, instrument, configuredPointSize)
-                        7 -> JournalTab(database, timeframe, instrument, configuredPointSize)
+                        7 -> RiskTab(riskBalance, { riskBalance = it }, riskPercent, { riskPercent = it }, riskSide, { riskSide = it }, riskEntry, { riskEntry = it }, riskStop, { riskStop = it }, riskTarget, { riskTarget = it }, riskContract, { riskContract = it }, risk, ::calculateRisk, instrument, configuredPointSize)
+                        8 -> JournalTab(database, timeframe, instrument, configuredPointSize)
                         else -> SettingsTab(
                             instrument = instrument,
                             metalPointSize = metalPointSize,
@@ -728,6 +729,52 @@ private fun SignalsTab(
                 Text(if (inst.symbol == dataset?.instrument) analysis?.direction?.name ?: "—" else "—", style = MaterialTheme.typography.bodySmall, color = Muted)
             }
             Divider()
+        }
+    }
+}
+
+@Composable
+private fun LearnTab() {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Forex Tutoring", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Gold)
+        Text("Learn the fundamentals of foreign exchange trading and risk management. All content is educational, not financial advice.", color = Muted, style = MaterialTheme.typography.bodySmall)
+
+        LessonCard(
+            title = "What is Forex?",
+            body = "Forex (foreign exchange) is the global market for trading currencies. You buy one currency while selling another, always in pairs such as EUR/USD or XAU/USD. Price moves reflect supply, demand, interest rates, and economic news. GoldLens reads historical candles and calculates signals locally — it does not execute trades.",
+        )
+        LessonCard(
+            title = "Reading Candlesticks",
+            body = "Each candle shows open, high, low, and close for a time period. A green (bullish) candle means close ≥ open; red (bearish) means close < open. The wicks show the high and low reached. GoldLens draws candles on the Overview and S/R Zones tabs using only confirmed historical data.",
+        )
+        LessonCard(
+            title = "Support and Resistance",
+            body = "Support is a price level where buying interest tends to stop a decline. Resistance is where selling pressure tends to stop a rally. GoldLens calculates S/R zones from confirmed swing pivots and highlights them as shaded bands on the chart. Zones with more touches are stronger.",
+        )
+        LessonCard(
+            title = "Risk Management Rules",
+            body = "1. Risk no more than 1–2% of your account per trade (GoldLens caps the calculator at 5%).\n2. Always set a stop loss before entering.\n3. Make your target at least 2× your stop distance (R:R ≥ 2.0).\n4. Never add to a losing position.\n5. Use the Risk tab to calculate position size before every trade.",
+        )
+        LessonCard(
+            title = "Understanding Signals",
+            body = "GoldLens labels each analysis BUY, SELL, or WAIT. BUY/SELL means the indicators align in that direction; WAIT means evidence is mixed or insufficient. Only new direction changes trigger notifications. Telegram receives only signals with R:R ≥ 2.0, evidence score ≥ 3, and no conflicts.",
+        )
+        LessonCard(
+            title = "Important Disclaimers",
+            body = "GoldLens uses historical/reference market data from an unofficial provider. Data may be delayed or rate-limited. Signals are not broker quotes, not executable orders, and not financial advice. Past performance does not predict future results. You alone are responsible for your trading decisions.",
+        )
+    }
+}
+
+@Composable
+private fun LessonCard(title: String, body: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, color = Gold, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(body, color = Muted, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

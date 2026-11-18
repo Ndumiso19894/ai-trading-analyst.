@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONObject
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
@@ -83,6 +84,44 @@ object TelegramNotifier {
             val response = responseStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299 || !runCatching { JSONObject(response).optBoolean("ok") }.getOrDefault(false)) {
                 throw IllegalStateException("Telegram rejected the message (HTTP $status). Check the bot token and chat ID.")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** Sends a photo (PNG bytes) with a caption via the Telegram Bot API sendPhoto endpoint. */
+    fun sendPhoto(token: String, chatId: String, photoBytes: ByteArray, caption: String) {
+        require(token.isNotBlank() && chatId.isNotBlank()) { "Telegram bot token and chat ID are required." }
+        require(caption.length <= 1_024) { "Telegram caption is too long." }
+        val boundary = "----GoldLensTelegram${java.util.UUID.randomUUID()}"
+        val connection = URL("https://api.telegram.org/bot$token/sendPhoto").openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 20_000
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            connection.outputStream.use { out: OutputStream ->
+                fun writeLine(line: String) { out.write((line + "\r\n").toByteArray(Charsets.UTF_8)) }
+                writeLine("--$boundary")
+                writeLine("Content-Disposition: form-data; name=\"chat_id\"\r\n")
+                writeLine(chatId)
+                writeLine("--$boundary")
+                writeLine("Content-Disposition: form-data; name=\"caption\"\r\n")
+                writeLine(caption)
+                writeLine("--$boundary")
+                writeLine("Content-Disposition: form-data; name=\"photo\"; filename=\"signal.png\"")
+                writeLine("Content-Type: image/png\r\n")
+                out.write(photoBytes)
+                writeLine("")
+                writeLine("--$boundary--")
+            }
+            val status = connection.responseCode
+            val responseStream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = responseStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299 || !runCatching { JSONObject(response).optBoolean("ok") }.getOrDefault(false)) {
+                throw IllegalStateException("Telegram rejected the photo (HTTP $status). Check the bot token and chat ID.")
             }
         } finally {
             connection.disconnect()
