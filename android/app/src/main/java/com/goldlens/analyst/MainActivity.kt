@@ -134,6 +134,8 @@ private fun GoldLensScreen(context: Context) {
     var tab by remember { mutableIntStateOf(0) }
     var timeframe by remember { mutableStateOf("1h") }
     var instrument by remember { mutableStateOf("XAU/USD") }
+    var lastUpdated by remember { mutableStateOf<Long?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
     var metalPointSize by remember(instrument) { mutableStateOf(prefs.getString("metal_point_size_$instrument", "") ?: "") }
     val configuredPointSize = metalPointSize.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
     var isBusy by remember { mutableStateOf(false) }
@@ -277,8 +279,49 @@ private fun GoldLensScreen(context: Context) {
                 dataset = selected
                 analysis = result
                 multiTimeframe = mtf
+                lastUpdated = System.currentTimeMillis()
             } catch (e: Exception) { error = e.message ?: "Analysis failed." }
             finally { isBusy = false }
+        }
+    }
+
+    /** Re-read the latest candles and analysis from the local Room database. Works fully offline. */
+    fun refreshFromLocalDb() {
+        scope.launch {
+            isRefreshing = true
+            error = ""
+            try {
+                val rows = withContext(Dispatchers.IO) {
+                    database.candleDao().latest(instrument, timeframe, 5_000).asReversed()
+                }
+                if (rows.isNotEmpty()) {
+                    val candles = rows.map { it.toCandle() }
+                    val first = rows.first()
+                    val restored = MarketDataset(
+                        candles,
+                        first.toDataSourceKind(),
+                        first.sourceLabel,
+                        timeframe,
+                        System.currentTimeMillis(),
+                        instrument,
+                        first.sourcePrecision,
+                    )
+                    dataset = restored
+                    val (result, mtf) = withContext(Dispatchers.Default) {
+                        val base = AnalysisEngine.analyze(restored)
+                        base to MultiTimeframeAnalyzer.analyze(restored)
+                    }
+                    val gated = MultiTimeframeAnalyzer.applyGate(result, mtf)
+                    analysis = gated
+                    multiTimeframe = mtf
+                    lastUpdated = System.currentTimeMillis()
+                    withContext(Dispatchers.IO) { database.saveAnalysis(gated.toEntity(), gated.zones.map { it.toEntity() }) }
+                    error = "Refreshed from local database · ${candles.size} candles · last updated ${java.time.Instant.ofEpochMilli(lastUpdated!!)}"
+                } else {
+                    error = "No candles stored locally for $instrument · $timeframe. Fetch provider candles or import a CSV."
+                }
+            } catch (e: Exception) { error = "Local refresh failed: ${e.message ?: \"unknown error\"}" }
+            finally { isRefreshing = false }
         }
     }
 
@@ -520,6 +563,7 @@ private fun GoldLensScreen(context: Context) {
                         val (result, mtf) = analyzeAndSave(restored)
                         analysis = result
                         multiTimeframe = mtf
+                        lastUpdated = System.currentTimeMillis()
                     }
                 }
             }
@@ -565,9 +609,10 @@ private fun GoldLensScreen(context: Context) {
                 ) {
                     if (error.isNotBlank()) InfoCard(error, if (error.startsWith("Loaded") || error.startsWith("Exported") || error.startsWith("Fetched")) Green else Red)
                     when (tab) {
-                        0 -> OverviewTab(dataset, analysis, timeframe, instrument, providerSnapshot, isBusy, configuredPointSize,
+                        0 -> OverviewTab(dataset, analysis, timeframe, instrument, providerSnapshot, isBusy, isRefreshing, lastUpdated, configuredPointSize,
                             onImport = { csvPicker.launch(arrayOf("text/*", "text/csv", "application/vnd.ms-excel")) },
                             onFetchMarket = ::fetchMarketData,
+                            onRefresh = ::refreshFromLocalDb,
                             onTimeframe = { nextTimeframe ->
                                 timeframe = nextTimeframe
                                 dataset = null
@@ -645,14 +690,23 @@ private fun GoldLensScreen(context: Context) {
 @Composable
 private fun OverviewTab(
     dataset: MarketDataset?, analysis: AnalysisResult?, timeframe: String, instrument: String,
-    providerSnapshot: ProviderMarketSnapshot?, busy: Boolean, configuredPointSize: Double?,
-    onImport: () -> Unit, onFetchMarket: () -> Unit, onTimeframe: (String) -> Unit, onInstrument: (String) -> Unit,
+    providerSnapshot: ProviderMarketSnapshot?, busy: Boolean, isRefreshing: Boolean, lastUpdated: Long?,
+    configuredPointSize: Double?,
+    onImport: () -> Unit, onFetchMarket: () -> Unit, onRefresh: () -> Unit, onTimeframe: (String) -> Unit, onInstrument: (String) -> Unit,
     onExport: () -> Unit, onAnalyze: () -> Unit, onRisk: () -> Unit,
 ) {
     InstrumentPicker(instrument, onInstrument)
-        OutlinedButton(onClick = onFetchMarket, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = onFetchMarket, enabled = !busy && !isRefreshing, modifier = Modifier.weight(1f)) {
             Text(if (busy) "Fetching market data…" else "Fetch provider candles · market data (unofficial)")
         }
+        OutlinedButton(onClick = onRefresh, enabled = !isRefreshing, modifier = Modifier.weight(1f)) {
+            Text(if (isRefreshing) "Refreshing…" else "Refresh from local DB (offline)")
+        }
+    }
+    lastUpdated?.let {
+        Text("Last updated: ${java.time.Instant.ofEpochMilli(it)}", color = Muted, style = MaterialTheme.typography.bodySmall)
+    }
     providerSnapshot?.let { snapshot ->
         InfoCard(
             "${snapshot.sourceLabel}\n${snapshot.instrument} · ${snapshot.timeframe} · ${snapshot.candles.size} candles\nLast candle close: ${snapshot.candles.lastOrNull()?.let { formatPrice(it.close, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nProvider reference: ${snapshot.providerReferencePrice?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nBid / ask: ${snapshot.bid?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"} / ${snapshot.ask?.let { formatPrice(it, snapshot.instrument, snapshot.sourcePrecision) } ?: "Unavailable"}\nLast candle timestamp: ${snapshot.candles.lastOrNull()?.let { java.time.Instant.ofEpochMilli(it.timestampMillis) } ?: "Unavailable"}\nProvider reference timestamp: ${snapshot.providerPriceTimestampMillis?.let { java.time.Instant.ofEpochMilli(it) } ?: "Unavailable"}\nFetched at: ${java.time.Instant.ofEpochMilli(snapshot.fetchedAtMillis)}\n${snapshot.note}",
