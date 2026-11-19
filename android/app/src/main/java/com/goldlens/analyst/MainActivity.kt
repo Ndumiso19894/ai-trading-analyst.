@@ -13,9 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background.*
-import androidx.compose.foundation.border.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -837,16 +836,10 @@ private fun SignalSummary(result: AnalysisResult, dataset: MarketDataset?, confi
         colors = CardDefaults.cardColors(containerColor = PanelElevated),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
-        border = BorderStroke(1.dp, SurfaceBorder),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(
-                    modifier = Modifier.size(32.dp).background(directionColor.copy(alpha = 0.15f), shape = CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
+                Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Column {
                     Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("${result.instrument} · ${result.timeframe} · ${result.dataSource.name}", color = MutedDim, style = MaterialTheme.typography.bodySmall)
@@ -909,7 +902,6 @@ private fun ZonesTab(zones: List<PriceZone>, candles: List<Candle>, price: Doubl
                 colors = CardDefaults.cardColors(containerColor = PanelElevated),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, SurfaceBorder),
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1216,7 +1208,6 @@ private fun CandlestickChart(candles: List<Candle>, zones: List<PriceZone>, last
         colors = CardDefaults.cardColors(containerColor = PanelElevated),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
-        border = BorderStroke(1.dp, SurfaceBorder),
     ) {
         if (candles.isEmpty()) {
             Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
@@ -1330,7 +1321,6 @@ private fun InfoCard(message: String, accent: Color) {
         colors = CardDefaults.cardColors(containerColor = PanelElevated),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),
-        border = BorderStroke(1.dp, SurfaceBorder),
     ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Canvas(Modifier.size(8.dp)) { drawCircle(accent) }
