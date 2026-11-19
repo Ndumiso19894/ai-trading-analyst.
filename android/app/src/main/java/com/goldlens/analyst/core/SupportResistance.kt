@@ -80,7 +80,8 @@ object SupportResistanceDetector {
                 else -> "weak"
             }
             val breakIndex = (lastTouch.index + 1..lastIndex).firstOrNull { index ->
-                if (cluster.side == ZoneSide.SUPPORT) candles[index].close < lower else candles[index].close > upper
+                val c = candles[index]
+                if (cluster.side == ZoneSide.SUPPORT) c.low < lower else c.high > upper
             }
             val current = candles.last()
             val retesting = breakIndex != null && when (cluster.side) {

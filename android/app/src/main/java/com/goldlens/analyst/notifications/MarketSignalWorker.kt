@@ -24,12 +24,14 @@ import com.goldlens.analyst.core.InstrumentPrice
 import com.goldlens.analyst.core.InstrumentRegistry
 import com.goldlens.analyst.core.MarketDataset
 import com.goldlens.analyst.core.MultiTimeframeAnalyzer
+import com.goldlens.analyst.core.SignalOutcomeTracker
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.replaceCandleSet
 import com.goldlens.analyst.data.saveAnalysis
 import com.goldlens.analyst.data.toEntity
 import com.goldlens.analyst.data.market.YahooFinanceChartProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.time.Instant
 
@@ -48,9 +50,13 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         for (instrument in InstrumentRegistry.instruments) {
             if (!prefs.getBoolean(KEY_ENABLED, false)) break
             try {
-                val snapshot = provider.fetch(instrument.symbol, timeframe)
+                val snapshot = fetchWithRetry(provider, instrument.symbol, timeframe)
+                val existingCandles = withContext(Dispatchers.IO) {
+                    database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
+                }
+                val mergedCandles = mergeCandles(existingCandles.map { it.toCandle() }, snapshot.candles)
                 val dataset = MarketDataset(
-                    candles = snapshot.candles,
+                    candles = mergedCandles,
                     source = snapshot.source,
                     sourceLabel = snapshot.sourceLabel,
                     timeframe = timeframe,
@@ -63,12 +69,12 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                     MultiTimeframeAnalyzer.applyGate(base, MultiTimeframeAnalyzer.analyze(dataset))
                 }
 
-                val latestPersisted = database.candleDao().latest(instrument.symbol, timeframe, 1).firstOrNull()
                 val lastCandleMillis = snapshot.candles.lastOrNull()?.timestampMillis
-                val newClosedCandle = lastCandleMillis != null && latestPersisted?.timestampMillis != lastCandleMillis
-                if (newClosedCandle) {
+                val existingLatest = existingCandles.firstOrNull()?.timestampMillis
+                val newClosedCandle = lastCandleMillis != null && existingLatest != lastCandleMillis
+                if (newClosedCandle && mergedCandles.size > existingCandles.size) {
                     database.replaceCandleSet(
-                        timeframe, snapshot.candles, instrument.symbol, snapshot.source,
+                        timeframe, mergedCandles, instrument.symbol, snapshot.source,
                         snapshot.sourceLabel, snapshot.sourcePrecision,
                     )
                     database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() })
@@ -110,6 +116,18 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
             return
         }
         val text = signalMessage(symbol, timeframe, result, dataset, prefs)
+
+        // Record signal for outcome tracking
+        SignalOutcomeTracker.recordSignal(
+            symbol = symbol,
+            timeframe = timeframe,
+            direction = result.direction,
+            entry = result.entry,
+            stopLoss = result.stopLoss,
+            takeProfit = result.takeProfit,
+            score = result.score,
+            rewardRisk = result.rewardRisk,
+        )
 
         if (SignalDeliveryPolicy.shouldDeliver(prefs.getString(localStateKey, null), result.direction) && postLocalNotification(symbol, timeframe, result.direction, text)) {
             prefs.edit().putString(localStateKey, result.direction.name).apply()
@@ -165,6 +183,27 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         } else if (token != null && !isSafeForTelegram && result.direction != Direction.WAIT) {
             prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram: $symbol ${result.direction.name} signal held — not meeting safety threshold (R:R ≥ 2.0, score ≥ 3, no conflicts).").apply()
         }
+    }
+
+    /** Fetch with 10s timeout and one retry after 2s backoff. */
+    private suspend fun fetchWithRetry(provider: YahooFinanceChartProvider, symbol: String, timeframe: String): com.goldlens.analyst.data.market.ProviderMarketSnapshot {
+        return withContext(Dispatchers.IO.withTimeout(10_000L)) {
+            runCatching { provider.fetch(symbol, timeframe) }.getOrElse { firstError ->
+                Log.w(TAG, "First fetch failed for $symbol: ${firstError.message}, retrying...")
+                withContext(Dispatchers.IO) { delay(2_000L) }
+                runCatching { provider.fetch(symbol, timeframe) }.getOrElse { secondError ->
+                    throw Exception("Fetch failed after 2 attempts: ${secondError.message ?: firstError.message ?: "unavailable"}")
+                }
+            }
+        }
+    }
+
+    /** Merge new candles with existing history, keeping oldest first, deduped by timestamp, capped at 1000. */
+    private fun mergeCandles(existing: List<com.goldlens.analyst.core.Candle>, fresh: List<com.goldlens.analyst.core.Candle>): List<com.goldlens.analyst.core.Candle> {
+        val byTimestamp = linkedMapOf<Long, com.goldlens.analyst.core.Candle>()
+        existing.forEach { byTimestamp[it.timestampMillis] = it }
+        fresh.forEach { byTimestamp[it.timestampMillis] = it }
+        return byTimestamp.values.sortedBy { it.timestampMillis }.takeLast(1000)
     }
 
     private fun signalMessage(

@@ -1,6 +1,8 @@
 package com.goldlens.analyst.core
 
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /** Deterministic, auditable signal engine. Scores are evidence points, not win probabilities. */
 object AnalysisEngine {
@@ -32,7 +34,7 @@ object AnalysisEngine {
             val hasRecentGap = recent.zipWithNext().any { (a, b) -> b.timestampMillis - a.timestampMillis > expectedInterval * 2 }
             if (hasRecentGap) return wait(dataset, last.close, last.timestampMillis, "Recent candle gaps make the market sequence incomplete; no directional signal issued.", zones, structure, latest)
         }
-        if (candles.size < 200 || latest.ema200 == null || latest.atr14 == null) {
+        if (candles.size < 100 || latest.ema200 == null || latest.atr14 == null) {
             return wait(dataset, last.close, last.timestampMillis, "At least 200 valid candles are required for the full EMA trend assessment.", zones, structure, latest)
         }
 
@@ -92,6 +94,30 @@ object AnalysisEngine {
             }
         }
 
+        // Candlestick pattern recognition
+        val patterns = CandlestickPatternDetector.detect(candles)
+        patterns.forEach { pattern ->
+            when {
+                pattern.bullish -> {
+                    score += when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0 }
+                    evidence += pattern.description
+                }
+                !pattern.bullish -> {
+                    score -= when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0 }
+                    conflicts += pattern.description
+                }
+            }
+        }
+
+        // Session filter — suppress signals during low-liquidity or closed sessions
+        val sessionInfo = SessionFilter.currentSession(nowMillis)
+        if (!sessionInfo.isActive) {
+            score = 0
+            conflicts += "Market session closed: ${sessionInfo.description}"
+        } else if (!SessionFilter.isSessionFavorable(dataset.instrument, nowMillis)) {
+            conflicts += "Not in favorable session for ${dataset.instrument}: ${sessionInfo.description}"
+        }
+
         val direction = when {
             score >= 3 -> Direction.BUY
             score <= -3 -> Direction.SELL
@@ -108,6 +134,17 @@ object AnalysisEngine {
             Direction.SELL -> price - 3.0 * atr
             Direction.WAIT -> null
         }
+        val riskDistance = when (direction) {
+            Direction.BUY -> kotlin.math.abs(price - stop!!)
+            Direction.SELL -> kotlin.math.abs(stop!! - price)
+            Direction.WAIT -> 0.0
+        }
+        val rewardDistance = when (direction) {
+            Direction.BUY -> kotlin.math.abs(target!! - price)
+            Direction.SELL -> kotlin.math.abs(price - target!!)
+            Direction.WAIT -> 0.0
+        }
+        val calculatedRR = if (riskDistance > 0.0) rewardDistance / riskDistance else null
         val reason = when (direction) {
             Direction.BUY -> "Bullish conditions meet the evidence threshold. This is a technical assessment, not a probability or trade instruction."
             Direction.SELL -> "Bearish conditions meet the evidence threshold. This is a technical assessment, not a probability or trade instruction."
@@ -116,7 +153,7 @@ object AnalysisEngine {
         return AnalysisResult(
             direction, price, last.timestampMillis, dataset.timeframe, dataset.source, score,
             reason, evidence, conflicts, latest, structure, zones, entry, stop, target,
-            if (direction == Direction.WAIT) null else 2.0,
+            calculatedRR,
             instrument = dataset.instrument,
         )
     }

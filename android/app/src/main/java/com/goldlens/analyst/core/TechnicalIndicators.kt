@@ -23,8 +23,8 @@ object TechnicalIndicators {
         val changes = close.indices.map { i -> if (i == 0) null else close[i] - close[i - 1] }
         val gains = changes.map { it?.coerceAtLeast(0.0) }
         val losses = changes.map { it?.let { value -> (-value).coerceAtLeast(0.0) } }
-        val avgGain = ewmNullable(gains, 14, smoothingAlpha = 1.0 / 14.0)
-        val avgLoss = ewmNullable(losses, 14, smoothingAlpha = 1.0 / 14.0)
+        val avgGain = wilderSmooth(gains, 14)
+        val avgLoss = wilderSmooth(losses, 14)
         val rsi = close.indices.map { i ->
             val gain = avgGain[i]
             val loss = avgLoss[i]
@@ -107,6 +107,32 @@ object TechnicalIndicators {
             current = if (current == null) value else alpha * value + (1.0 - alpha) * current!!
             observed++
             if (observed >= period) current else null
+        }
+    }
+
+    /** Wilder's smoothing: seeds with simple average of first `period` values, then smooths. */
+    private fun wilderSmooth(values: List<Double?>, period: Int): List<Double?> {
+        require(period > 0)
+        var current: Double? = null
+        var sum = 0.0
+        var count = 0
+        return values.map { value ->
+            if (value == null || !value.isFinite()) {
+                if (current != null) count++ // keep emitting null but advance count for alignment
+                return@map null
+            }
+            sum += value
+            count++
+            if (count < period) {
+                current = null
+                return@map null
+            }
+            if (current == null) {
+                current = sum / period
+            } else {
+                current = (current * (period - 1) + value) / period
+            }
+            current
         }
     }
 
