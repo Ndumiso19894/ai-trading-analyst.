@@ -18,6 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.withTransaction
 import com.goldlens.analyst.core.AnalysisResult
 import com.goldlens.analyst.core.Candle
+import kotlinx.coroutines.flow.Flow
 import com.goldlens.analyst.core.DataSourceKind
 import com.goldlens.analyst.core.PriceZone
 
@@ -149,6 +150,9 @@ interface CandleDao {
     @Query("SELECT * FROM market_candles WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY timestamp_millis DESC LIMIT :limit")
     suspend fun latest(symbol: String, timeframe: String, limit: Int): List<CandleEntity>
 
+    @Query("SELECT * FROM market_candles WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY timestamp_millis DESC LIMIT :limit")
+    fun latestFlow(symbol: String, timeframe: String, limit: Int): Flow<List<CandleEntity>>
+
     @Query("DELETE FROM market_candles WHERE symbol = :symbol AND timeframe = :timeframe")
     suspend fun delete(symbol: String, timeframe: String)
 
@@ -166,6 +170,12 @@ interface AnalysisDao {
 
     @Query("SELECT * FROM analysis_records ORDER BY timestamp_millis DESC LIMIT :limit")
     suspend fun history(limit: Int): List<AnalysisEntity>
+
+    @Query("SELECT * FROM analysis_records WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY timestamp_millis DESC LIMIT 1")
+    suspend fun latest(symbol: String, timeframe: String): AnalysisEntity?
+
+    @Query("SELECT * FROM analysis_records WHERE symbol = :symbol AND timeframe = :timeframe ORDER BY timestamp_millis DESC LIMIT 1")
+    fun latestFlow(symbol: String, timeframe: String): Flow<AnalysisEntity?>
 
     @Query("SELECT * FROM analysis_zones WHERE analysis_id = :analysisId ORDER BY side, midpoint")
     suspend fun zones(analysisId: Long): List<ZoneEntity>

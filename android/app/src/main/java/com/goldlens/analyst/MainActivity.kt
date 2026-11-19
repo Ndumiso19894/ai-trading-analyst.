@@ -78,6 +78,7 @@ import com.goldlens.analyst.notifications.MarketSignalWorker
 import com.goldlens.analyst.notifications.TelegramNotifier
 import com.goldlens.analyst.notifications.TelegramTokenStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -478,30 +479,54 @@ private fun GoldLensScreen(context: Context) {
     }
 
     LaunchedEffect(Unit) {
-        // WorkManager work can be dropped by force-stop/reboot handling; re-queue the periodic
-        // scan (without an immediate run) whenever the user previously enabled monitoring.
-        if (prefs.getBoolean(MarketSignalWorker.KEY_ENABLED, false)) {
-            runCatching { MarketSignalScheduler.resumePeriodic(context) }
-        }
-    }
-    LaunchedEffect(database) {
-        try {
-            val settings = withContext(Dispatchers.IO) {
-                (database.settingDao().get("timeframe") ?: "1h") to (database.settingDao().get("instrument") ?: "XAU/USD")
-            }
-            val savedTimeframe = settings.first
-            val savedInstrument = InstrumentRegistry.find(settings.second)?.symbol ?: "XAU/USD"
+        // Load saved settings
+        withContext(Dispatchers.IO) {
+            val savedTimeframe = database.settingDao().get("timeframe") ?: "1h"
+            val savedInstrument = InstrumentRegistry.find(database.settingDao().get("instrument") ?: "XAU/USD")?.symbol ?: "XAU/USD"
             timeframe = savedTimeframe
             instrument = savedInstrument
-            val rows = withContext(Dispatchers.IO) { database.candleDao().latest(savedInstrument, savedTimeframe, 5_000).asReversed() }
-            if (rows.isNotEmpty()) {
-                val restored = MarketDataset(rows.map { it.toCandle() }, rows.first().toDataSourceKind(), rows.first().sourceLabel, savedTimeframe, System.currentTimeMillis(), savedInstrument, rows.first().sourcePrecision)
-                dataset = restored
-                analysis = withContext(Dispatchers.Default) { AnalysisEngine.analyze(restored) }
+        }
+        settingsLoaded = true
+
+        // Auto-start background monitoring so downloads and analysis run without user intervention.
+        if (prefs.getBoolean(MarketSignalWorker.KEY_ENABLED, false)) {
+            runCatching { MarketSignalScheduler.resumePeriodic(context) }
+        } else {
+            prefs.edit().putBoolean(MarketSignalWorker.KEY_ENABLED, true).apply()
+            MarketSignalScheduler.start(context)
+        }
+    }
+
+    // Collect candle flow for the current instrument/timeframe.
+    // Re-runs analysis automatically whenever the background worker writes new candles —
+    // Overview and Signals tabs update with zero manual action.
+    LaunchedEffect(instrument, timeframe) {
+        try {
+            database.candleDao().latestFlow(instrument, timeframe, 5_000).collect { candleEntities ->
+                if (candleEntities.isNotEmpty()) {
+                    withContext(Dispatchers.Default) {
+                        val candles = candleEntities.map { it.toCandle() }.reversed()
+                        val first = candleEntities.first()
+                        val restored = MarketDataset(
+                            candles,
+                            first.toDataSourceKind(),
+                            first.sourceLabel,
+                            timeframe,
+                            System.currentTimeMillis(),
+                            instrument,
+                            first.sourcePrecision
+                        )
+                        dataset = restored
+                        val (result, mtf) = analyzeAndSave(restored)
+                        analysis = result
+                        multiTimeframe = mtf
+                    }
+                }
             }
         } catch (e: Exception) {
             error = "Local database could not be read: ${e.message ?: "unknown error"}"
-        } finally { settingsLoaded = true }
+        }
+        settingsLoaded = true
         if (backendUrl.isNotBlank()) request("/health")
     }
     LaunchedEffect(timeframe, settingsLoaded) {
