@@ -58,8 +58,8 @@ object CandlestickPatternDetector {
         val body = abs(c.close - c.open)
         val range = c.high - c.low
         if (range == 0.0) return null
-        val lowerWick = min(c.open, c.close) - c.low
-        val upperWick = c.high - max(c.open, c.close)
+        val lowerWick = minVal(c.open, c.close) - c.low
+        val upperWick = c.high - maxVal(c.open, c.close)
         // Hammer: small body at top, long lower wick (2x body), little upper wick
         if (lowerWick > body * 2.0 && upperWick < body * 0.5 && body / range > 0.1) {
             return PatternResult("Hammer", true, "moderate",
@@ -146,6 +146,6 @@ object CandlestickPatternDetector {
         return null
     }
 
-    private fun min(a: Double, b: Double) = if (a < b) a else b
-    private fun max(a: Double, b: Double) = if (a > b) a else b
+    private fun minVal(a: Double, b: Double) = if (a < b) a else b
+    private fun maxVal(a: Double, b: Double) = if (a > b) a else b
 }

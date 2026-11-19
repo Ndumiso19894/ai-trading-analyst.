@@ -110,18 +110,15 @@ object TechnicalIndicators {
         }
     }
 
-    /** Wilder's smoothing: seeds with simple average of first `period` values, then smooths. */
+    /** Wilder's smoothing: seeds with simple average of first `period` values, then smooths. Null values treated as 0. */
     private fun wilderSmooth(values: List<Double?>, period: Int): List<Double?> {
         require(period > 0)
         var current: Double? = null
         var sum = 0.0
         var count = 0
         return values.map { value ->
-            if (value == null || !value.isFinite()) {
-                if (current != null) count++ // keep emitting null but advance count for alignment
-                return@map null
-            }
-            sum += value
+            val v = if (value == null || !value.isFinite()) 0.0 else value
+            sum += v
             count++
             if (count < period) {
                 current = null
@@ -130,7 +127,7 @@ object TechnicalIndicators {
             if (current == null) {
                 current = sum / period
             } else {
-                current = (current * (period - 1) + value) / period
+                current = (current * (period - 1) + v) / period
             }
             current
         }

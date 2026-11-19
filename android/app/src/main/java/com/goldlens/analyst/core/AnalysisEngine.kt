@@ -1,8 +1,6 @@
 package com.goldlens.analyst.core
 
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 /** Deterministic, auditable signal engine. Scores are evidence points, not win probabilities. */
 object AnalysisEngine {
