@@ -293,9 +293,10 @@ not-a-time,1,2,0.5,1.5,3
         val base = repeatedLevelCandles()
         val resistanceZones = SupportResistanceDetector.detect(base, "1h")
         val zone = resistanceZones.first { it.side == ZoneSide.RESISTANCE && it.midpoint in 109.0..111.0 }
+        // Wick penetration above resistance counts as a break (wick-based detection)
         val wickOnly = base + candle(30, open = 109.8, high = zone.upper + 2, low = 108.8, close = zone.midpoint - 0.1)
         val wickZones = SupportResistanceDetector.detect(wickOnly, "1h")
-        assertEquals(ZoneStatus.ACTIVE, wickZones.first { it.side == ZoneSide.RESISTANCE && it.midpoint in 109.0..111.0 }.status)
+        assertEquals(ZoneStatus.BROKEN, wickZones.first { it.side == ZoneSide.RESISTANCE && it.midpoint in 109.0..111.0 }.status)
 
         val confirmedBreak = base + candle(30, 111.5, 113.0, 111.0, 112.0)
         val broken = SupportResistanceDetector.detect(confirmedBreak, "1h")
