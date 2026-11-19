@@ -124,8 +124,8 @@ object ChartRenderer {
         // Border
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), borderPaint)
 
-        // Title
-        canvas.drawText("$symbol · $timeframe · ${direction ?: "—"}", PADDING, PADDING - 8, titlePaint)
+        // Title — padded below top edge so it isn't clipped
+        canvas.drawText("$symbol · $timeframe · ${direction ?: "—"}", PADDING, PADDING + 14, titlePaint)
 
         return bitmap
     }

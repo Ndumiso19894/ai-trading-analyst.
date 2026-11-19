@@ -64,10 +64,11 @@ object CandlestickPatternDetector {
             return PatternResult("Hammer", true, "moderate",
                 "Hammer: rejection of lower prices, potential bullish reversal.")
         }
-        // Inverted hammer: small body at bottom, long upper wick
+        // Inverted hammer: small body at bottom, long upper wick — context-dependent,
+        // bullish at support but bearish at resistance; reported as neutral without context.
         if (upperWick > body * 2.0 && lowerWick < body * 0.5 && body / range > 0.1) {
-            return PatternResult("Inverted Hammer", true, "moderate",
-                "Inverted Hammer: rejection of higher prices, potential bullish reversal.")
+            return PatternResult("Inverted Hammer", false, "moderate",
+                "Inverted Hammer: rejection of higher prices — context-dependent, confirm with trend.")
         }
         return null
     }
@@ -89,10 +90,10 @@ object CandlestickPatternDetector {
         val body = abs(c.close - c.open)
         val range = c.high - c.low
         if (range == 0.0) return null
-        // Doji: body is very small relative to range (< 5%)
+        // Doji: body is very small relative to range (< 5%) — neutral, no directional bias
         if (body / range < 0.05) {
-            return PatternResult("Doji", true, "weak",
-                "Doji: indecision candle, neutral bias.")
+            return PatternResult("Doji", false, "weak",
+                "Doji: indecision candle, neutral bias — no directional signal.")
         }
         return null
     }

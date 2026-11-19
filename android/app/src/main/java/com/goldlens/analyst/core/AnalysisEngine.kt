@@ -132,12 +132,14 @@ object AnalysisEngine {
             }
         }
 
-        // Session filter — suppress signals during low-liquidity or closed sessions
+        // Session filter — suppress signals during low-liquidity or closed sessions.
+        // Penalize but don't zero the score so directional evidence isn't discarded.
         val sessionInfo = SessionFilter.currentSession(nowMillis)
         if (!sessionInfo.isActive) {
-            score = 0
+            score -= 2
             conflicts += "Market session closed: ${sessionInfo.description}"
         } else if (!SessionFilter.isSessionFavorable(dataset.instrument, nowMillis)) {
+            score -= 1
             conflicts += "Not in favorable session for ${dataset.instrument}: ${sessionInfo.description}"
         }
 

@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 object SignalOutcomeTracker {
 
     data class SignalRecord(
+        val id: String,
         val symbol: String,
         val timeframe: String,
         val direction: Direction,
@@ -31,15 +32,16 @@ object SignalOutcomeTracker {
                      entry: Double?, stopLoss: Double?, takeProfit: Double?,
                      score: Int, rewardRisk: Double?): String {
         val id = "${symbol}_${timeframe}_${System.currentTimeMillis()}"
-        val record = SignalRecord(symbol, timeframe, direction, entry, stopLoss, takeProfit,
-            score, rewardRisk, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val record = SignalRecord(id, symbol, timeframe, direction, entry, stopLoss, takeProfit,
+            score, rewardRisk, now)
         records.computeIfAbsent(symbol) { mutableListOf() }.add(record)
         return id
     }
 
     fun updateOutcome(symbol: String, signalId: String, outcome: Outcome, exitPrice: Double?) {
         val symbolRecords = records[symbol] ?: return
-        val record = symbolRecords.find { "${it.symbol}_${it.timeframe}_${it.openedAtMillis}" == signalId }
+        val record = symbolRecords.find { it.id == signalId }
         if (record != null) {
             record.outcome = outcome
             record.closedAtMillis = System.currentTimeMillis()

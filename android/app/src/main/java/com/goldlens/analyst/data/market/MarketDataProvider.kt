@@ -126,7 +126,7 @@ class YahooFinanceChartProvider(
             connection.readTimeout = 12_000
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "GoldLensAndroid/0.5")
+            connection.setRequestProperty("User-Agent", "GoldLensAndroid/0.6.0")
             val status = connection.responseCode
             if (status == 429) throw MarketDataException("Provider rate limit reached. Wait before retrying.")
             if (status !in 200..299) throw MarketDataException("Provider request failed with HTTP $status.")

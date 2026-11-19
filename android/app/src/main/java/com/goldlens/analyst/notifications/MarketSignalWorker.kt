@@ -70,9 +70,7 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                         continue
                     }
                     val snapshot = fetchWithRetry(provider, instrument.symbol, timeframe)
-                    val existingCandles = withContext(Dispatchers.IO) {
-                        database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
-                    }
+                    val existingCandles = database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
                     val mergedCandles = mergeCandles(existingCandles.map { it.toCandle() }, snapshot.candles)
                     val dataset = MarketDataset(
                         candles = mergedCandles,
