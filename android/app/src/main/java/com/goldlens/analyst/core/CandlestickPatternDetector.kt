@@ -77,8 +77,8 @@ object CandlestickPatternDetector {
         val body = abs(c.close - c.open)
         val range = c.high - c.low
         if (range == 0.0) return null
-        val upperWick = c.high - max(c.open, c.close)
-        val lowerWick = min(c.open, c.close) - c.low
+        val upperWick = c.high - maxVal(c.open, c.close)
+        val lowerWick = minVal(c.open, c.close) - c.low
         if (upperWick > body * 2.0 && lowerWick < body * 0.5 && body / range > 0.1) {
             return PatternResult("Shooting Star", false, "moderate",
                 "Shooting Star: rejection of higher prices, potential bearish reversal.")

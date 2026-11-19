@@ -30,7 +30,7 @@ object SignalOutcomeTracker {
     fun recordSignal(symbol: String, timeframe: String, direction: Direction,
                      entry: Double?, stopLoss: Double?, takeProfit: Double?,
                      score: Int, rewardRisk: Double?): String {
-        val id = "${symbol}_$timeframe_${System.currentTimeMillis()}"
+        val id = "${symbol}_${timeframe}_${System.currentTimeMillis()}"
         val record = SignalRecord(symbol, timeframe, direction, entry, stopLoss, takeProfit,
             score, rewardRisk, System.currentTimeMillis())
         records.computeIfAbsent(symbol) { mutableListOf() }.add(record)

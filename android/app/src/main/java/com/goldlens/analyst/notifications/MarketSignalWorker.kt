@@ -28,11 +28,13 @@ import com.goldlens.analyst.core.SignalOutcomeTracker
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.replaceCandleSet
 import com.goldlens.analyst.data.saveAnalysis
+import com.goldlens.analyst.data.toCandle
 import com.goldlens.analyst.data.toEntity
 import com.goldlens.analyst.data.market.YahooFinanceChartProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.time.Instant
 
 class MarketSignalWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

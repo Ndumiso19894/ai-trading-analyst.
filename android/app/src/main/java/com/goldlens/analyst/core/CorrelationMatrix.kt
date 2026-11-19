@@ -7,10 +7,10 @@ package com.goldlens.analyst.core
 object CorrelationMatrix {
 
     private val groups = listOf(
-        groupOf("EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD", "USD/CAD", "USD/CHF", "USD/ZAR"),
-        groupOf("USD/JPY", "EUR/JPY", "GBP/JPY"),
-        groupOf("EUR/GBP"),
-        groupOf("XAU/USD", "XAG/USD", "XPT/USD"),
+        listOf("EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD", "USD/CAD", "USD/CHF", "USD/ZAR"),
+        listOf("USD/JPY", "EUR/JPY", "GBP/JPY"),
+        listOf("EUR/GBP"),
+        listOf("XAU/USD", "XAG/USD", "XPT/USD"),
     )
 
     /** Returns the group index for an instrument, or null if not found. */
