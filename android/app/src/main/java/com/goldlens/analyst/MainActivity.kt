@@ -320,7 +320,7 @@ private fun GoldLensScreen(context: Context) {
                 } else {
                     error = "No candles stored locally for $instrument · $timeframe. Fetch provider candles or import a CSV."
                 }
-            } catch (e: Exception) { error = "Local refresh failed: ${e.message ?: \"unknown error\"}" }
+            } catch (e: Exception) { error = "Local refresh failed: ${e.message ?: "unknown error"}" }
             finally { isRefreshing = false }
         }
     }
