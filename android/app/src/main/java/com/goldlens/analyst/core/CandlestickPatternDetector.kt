@@ -18,21 +18,20 @@ object CandlestickPatternDetector {
     /** Detect patterns on the last 3 candles. Returns all matching patterns. */
     fun detect(candles: List<Candle>): List<PatternResult> {
         if (candles.size < 3) return emptyList()
-        val results = mutableListOf<PatternResult>()
         val c1 = candles[candles.size - 3] // oldest
         val c2 = candles[candles.size - 2] // middle
         val c3 = candles[candles.size - 1] // latest (most recent completed)
 
-        results += detectEngulfing(c2, c3)
-        results += detectHammer(c3)
-        results += detectShootingStar(c3)
-        results += detectDoji(c3)
-        results += detectMorningStar(c1, c2, c3)
-        results += detectEveningStar(c1, c2, c3)
-        results += detectPiercingLine(c2, c3)
-        results += detectDarkCloudCover(c2, c3)
-
-        return results.filter { it != null } as List<PatternResult>
+        return listOf(
+            detectEngulfing(c2, c3),
+            detectHammer(c3),
+            detectShootingStar(c3),
+            detectDoji(c3),
+            detectMorningStar(c1, c2, c3),
+            detectEveningStar(c1, c2, c3),
+            detectPiercingLine(c2, c3),
+            detectDarkCloudCover(c2, c3),
+        ).filterNotNull()
     }
 
     private fun detectEngulfing(c2: Candle, c3: Candle): PatternResult? {

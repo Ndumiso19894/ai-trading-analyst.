@@ -97,11 +97,11 @@ object AnalysisEngine {
         patterns.forEach { pattern ->
             when {
                 pattern.bullish -> {
-                    score += when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0 }
+                    score += when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0; else -> 0 }
                     evidence += pattern.description
                 }
                 !pattern.bullish -> {
-                    score -= when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0 }
+                    score -= when (pattern.strength) { "strong" -> 2; "moderate" -> 1; "weak" -> 0; else -> 0 }
                     conflicts += pattern.description
                 }
             }
