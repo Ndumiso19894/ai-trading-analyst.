@@ -102,6 +102,7 @@ data class AnalysisResult(
     val takeProfit: Double?,
     val rewardRisk: Double?,
     val instrument: String = "XAU/USD",
+    val trailingStop: Double? = null,
 )
 
 data class RiskInput(

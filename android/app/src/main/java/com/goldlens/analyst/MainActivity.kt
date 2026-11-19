@@ -82,12 +82,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
-private val Gold = Color(0xFFD9B45B)
-private val Screen = Color(0xFF090C11)
-private val Panel = Color(0xFF141922)
-private val Muted = Color(0xFF9AA4B3)
-private val Green = Color(0xFF40C99A)
-private val Red = Color(0xFFFF7777)
+private val Gold = Color(0xFFE3C470)
+private val Screen = Color(0xFF0B0E13)
+private val Panel = Color(0xFF161B22)
+private val PanelElevated = Color(0xFF1C2128)
+private val Muted = Color(0xFF8B949E)
+private val MutedDim = Color(0xFF6E7681)
+private val Green = Color(0xFF3FB95F)
+private val GreenDim = Color(0xFF2EA043)
+private val Red = Color(0xFFD73A49)
+private val RedDim = Color(0xFFCB243E)
+private val Blue = Color(0xFF79C0FF)
+private val SurfaceBorder = Color(0xFF30363D)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -509,11 +515,12 @@ private fun GoldLensScreen(context: Context) {
     }
     val tabs = listOf("Overview", "Signals", "Learn", "Analysis", "S/R Zones", "Backtest", "Exports", "Risk", "Journal", "Settings")
 
-    MaterialTheme(colorScheme = darkColorScheme(
-        primary = Gold, onPrimary = Color(0xFF17130A), secondary = Green,
-        background = Screen, surface = Panel, onSurface = Color(0xFFE7EAF0),
-        onBackground = Color(0xFFE7EAF0), error = Red,
-    )) {
+        MaterialTheme(colorScheme = darkColorScheme(
+            primary = Gold, onPrimary = Color(0xFF17130A), secondary = Green,
+            background = Screen, surface = Panel, onSurface = Color(0xFFE7EAF0),
+            onBackground = Color(0xFFE7EAF0), error = Red,
+            surfaceVariant = PanelElevated,
+        )) {
         Scaffold(containerColor = Screen) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
@@ -822,30 +829,53 @@ private fun AnalysisTab(analysis: AnalysisResult?, dataset: MarketDataset?, busy
 @Composable
 private fun SignalSummary(result: AnalysisResult, dataset: MarketDataset?, configuredPointSize: Double?, showEvidence: Boolean = true) {
     val directionColor = when (result.direction) { Direction.BUY -> Green; Direction.SELL -> Red; Direction.WAIT -> Gold }
-    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("${result.instrument} · ${result.timeframe} · ${result.dataSource.name}", color = Muted, style = MaterialTheme.typography.bodySmall)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = PanelElevated),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(1f, SurfaceBorder),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(32.dp).background(directionColor.copy(alpha = 0.15f), shape = CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Column {
+                    Text(result.direction.name, color = directionColor, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("${result.instrument} · ${result.timeframe} · ${result.dataSource.name}", color = MutedDim, style = MaterialTheme.typography.bodySmall)
+                }
             }
-            result.price?.let { Text("Last candle close: ${formatPrice(it, result.instrument, dataset?.sourcePrecision)}", style = MaterialTheme.typography.titleMedium) }
-            dataset?.let { Text("Source: ${it.sourceLabel} · candle age ${result.timestampMillis?.let(::candleAge) ?: "unknown"}", color = Muted, style = MaterialTheme.typography.bodySmall) }
-            Text(result.reason, color = Muted)
+            result.price?.let {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Close", color = MutedDim, style = MaterialTheme.typography.labelSmall)
+                    Text(formatPrice(it, result.instrument, dataset?.sourcePrecision), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                }
+            }
+            dataset?.let {
+                Text("Source: ${it.sourceLabel} · candle age ${result.timestampMillis?.let(::candleAge) ?: "unknown"}", color = MutedDim, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(result.reason, color = Muted, style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SmallMetric("Entry", result.entry, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
                 SmallMetric("Stop", result.stopLoss, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
                 SmallMetric("Target", result.takeProfit, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
                 SmallMetric("R:R", result.rewardRisk, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f), priceValue = false)
+                if (result.trailingStop != null) {
+                    SmallMetric("Trail Stop", result.trailingStop, result.instrument, dataset?.sourcePrecision, Modifier.weight(1f))
+                }
             }
             if (result.direction != Direction.WAIT) {
                 val stopDistance = InstrumentPrice.unitDistanceText(result.instrument, result.entry, result.stopLoss, configuredPointSize)
                     ?: if (result.entry != null && result.stopLoss != null) "${formatPrice(kotlin.math.abs(result.entry - result.stopLoss), result.instrument, dataset?.sourcePrecision)} price units" else "—"
                 val targetDistance = InstrumentPrice.unitDistanceText(result.instrument, result.entry, result.takeProfit, configuredPointSize)
                     ?: if (result.entry != null && result.takeProfit != null) "${formatPrice(kotlin.math.abs(result.takeProfit - result.entry), result.instrument, dataset?.sourcePrecision)} price units" else "—"
-                Text("Stop distance: $stopDistance · take-profit distance: $targetDistance", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("Stop distance: $stopDistance · take-profit distance: $targetDistance", color = MutedDim, style = MaterialTheme.typography.bodySmall)
             }
             if (result.direction != Direction.WAIT) {
-                Text("Level method: entry uses the latest candle close; stop is 1.5 × ATR(14) away and target is 3 × ATR(14) away. R:R is theoretical before spread, slippage, commission and broker contract rules.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("Level method: entry = latest candle close; stop = 1.5 × ATR(14); target = 3 × ATR(14). Trailing stop at recent swing level or 2 × ATR. R:R is theoretical before spread, slippage, commission and broker contract rules.", color = MutedDim, style = MaterialTheme.typography.bodySmall)
             }
             if (showEvidence && result.evidence.isNotEmpty()) {
                 Text("Why this signal", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
@@ -855,8 +885,8 @@ private fun SignalSummary(result: AnalysisResult, dataset: MarketDataset?, confi
                 Text("Cautions / conflicting evidence", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
                 result.conflicts.take(4).forEach { BulletLine(it, Gold) }
             }
-            Text("Evidence score ${result.score}; not a probability or a guarantee. This is analysis, not an order.", color = Muted, style = MaterialTheme.typography.labelSmall)
-            if (result.timestampMillis != null) Text("Candle time: ${java.time.Instant.ofEpochMilli(result.timestampMillis)}", color = Muted, style = MaterialTheme.typography.labelSmall)
+            Text("Evidence score ${result.score} · not a probability or guarantee · analysis, not an order.", color = MutedDim, style = MaterialTheme.typography.labelSmall)
+            if (result.timestampMillis != null) Text("Candle time: ${java.time.Instant.ofEpochMilli(result.timestampMillis)}", color = MutedDim, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -871,12 +901,19 @@ private fun ZonesTab(zones: List<PriceZone>, candles: List<Candle>, price: Doubl
     zones.sortedWith(compareBy<PriceZone> { if (it.side == ZoneSide.SUPPORT) 0 else 1 }.thenBy { kotlin.math.abs((price ?: it.midpoint) - it.midpoint) })
         .forEach { zone ->
             val color = if (zone.side == ZoneSide.SUPPORT) Green else Red
-            Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PanelElevated),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1f, SurfaceBorder),
+            ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("${zone.strength.uppercase()} ${zone.side.name} · ${zone.timeframe}", color = color, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("${zone.strength.uppercase()} ${zone.side.name} · ${zone.timeframe}", color = color, fontWeight = FontWeight.Bold)
+                        Text("Status: ${zone.status.name.lowercase()}", color = MutedDim, style = MaterialTheme.typography.labelSmall)
+                    }
                     Text("${formatPrice(zone.lower, instrument, sourcePrecision)} – ${formatPrice(zone.upper, instrument, sourcePrecision)} · ${zone.touches} separated pivot touches", style = MaterialTheme.typography.bodyMedium)
-                    Text("Status: ${zone.status.name.lowercase()} · rejection score ${"%.2f".format(java.util.Locale.US, zone.rejectionScore)}", color = Muted, style = MaterialTheme.typography.bodySmall)
-                    Text("Last confirmed reaction: ${java.time.Instant.ofEpochMilli(zone.lastTouchMillis)}", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text("Rejection score: ${"%.2f".format(java.util.Locale.US, zone.rejectionScore)} · Last reaction: ${java.time.Instant.ofEpochMilli(zone.lastTouchMillis)}", color = MutedDim, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -1171,37 +1208,78 @@ private fun TimeframePicker(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 private fun CandlestickChart(candles: List<Candle>, zones: List<PriceZone>, lastPrice: Double?) {
-    Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = PanelElevated),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(1f, SurfaceBorder),
+    ) {
         if (candles.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) { Text("No candle data", color = Muted) }
+            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Text("No candle data", color = MutedDim)
+            }
         } else {
-            Canvas(Modifier.fillMaxWidth().height(250.dp).padding(12.dp)) {
+            Canvas(Modifier.fillMaxWidth().height(260.dp).padding(16.dp)) {
                 val visible = candles.takeLast(80)
                 val lo = visible.minOf(Candle::low)
                 val hi = visible.maxOf(Candle::high)
                 val span = (hi - lo).coerceAtLeast(1e-9)
                 fun y(v: Double) = size.height - ((v - lo) / span * size.height).toFloat()
+
+                // Close-price gradient area
+                val path = androidx.compose.ui.graphics.Path()
+                val step = size.width / visible.size
+                visible.forEachIndexed { index, candle ->
+                    val x = step * (index + 0.5f)
+                    val yy = y(candle.close)
+                    if (index == 0) path.moveTo(x, yy) else path.lineTo(x, yy)
+                }
+                path.lineTo(size.width, size.height)
+                path.lineTo(0f, size.height)
+                path.close()
+                val gradient = Brush.linearGradient(
+                    colors = listOf(Green.copy(alpha = 0.10f), Green.copy(alpha = 0.0f)),
+                    start = Offset(0f, 0f),
+                    end = Offset(0f, size.height),
+                )
+                drawPath(path, brush = gradient)
+
+                // Grid lines
+                val gridSteps = 4
+                for (i in 0..gridSteps) {
+                    val v = lo + (hi - lo) * i / gridSteps
+                    val yy = y(v)
+                    drawLine(SurfaceBorder.copy(alpha = 0.3f), Offset(0f, yy), Offset(size.width, yy), strokeWidth = 0.5f)
+                }
+
+                // Zones
                 zones.forEach { zone ->
                     if (zone.upper >= lo && zone.lower <= hi) {
                         val c = if (zone.side == ZoneSide.SUPPORT) Green else Red
                         val top = y(zone.upper)
                         val bottom = y(zone.lower)
-                        drawRect(c.copy(alpha = 0.10f), topLeft = Offset(0f, top), size = Size(size.width, (bottom - top).coerceAtLeast(1f)))
+                        drawRect(c.copy(alpha = 0.08f), topLeft = Offset(0f, top), size = Size(size.width, (bottom - top).coerceAtLeast(1f)))
+                        drawRect(c.copy(alpha = 0.5f), topLeft = Offset(0f, top), size = Size(4f, (bottom - top).coerceAtLeast(1f)))
                     }
                 }
-                val step = size.width / visible.size
+
+                // Candles
                 visible.forEachIndexed { index, candle ->
                     val centerX = step * (index + 0.5f)
                     val color = if (candle.close >= candle.open) Green else Red
-                    drawLine(color, Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)), strokeWidth = 1.4f)
+                    drawLine(color, Offset(centerX, y(candle.high)), Offset(centerX, y(candle.low)), strokeWidth = 1.2f)
                     val top = y(maxOf(candle.open, candle.close))
                     val bottom = y(minOf(candle.open, candle.close))
-                    drawRect(color, Offset(centerX - step * 0.28f, top), Size((step * 0.56f).coerceAtLeast(1.2f), (bottom - top).coerceAtLeast(1.5f)))
+                    drawRect(color, Offset(centerX - step * 0.26f, top), Size((step * 0.52f).coerceAtLeast(1.0f), (bottom - top).coerceAtLeast(1.2f)))
                 }
+
+                // Last price line
                 if (lastPrice != null && lastPrice in lo..hi) {
-                    drawLine(Gold, Offset(0f, y(lastPrice)), Offset(size.width, y(lastPrice)), strokeWidth = 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f)))
+                    drawLine(Gold, Offset(0f, y(lastPrice)), Offset(size.width, y(lastPrice)), strokeWidth = 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f)))
                 }
-                drawRect(Color(0xFF3A414D), size = size, style = Stroke(width = 1f))
+
+                // Border
+                drawRect(Color(0xFF30363D), size = size, style = Stroke(width = 1f))
             }
         }
     }
@@ -1244,7 +1322,12 @@ private fun MetricRow(title: String, value: String, note: String) {
 
 @Composable
 private fun InfoCard(message: String, accent: Color) {
-    Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = PanelElevated),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(1f, SurfaceBorder),
+    ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Canvas(Modifier.size(8.dp)) { drawCircle(accent) }
             Text(message, color = Muted, style = MaterialTheme.typography.bodySmall)

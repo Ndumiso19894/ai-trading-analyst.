@@ -92,6 +92,15 @@ object AnalysisEngine {
             }
         }
 
+        // Volume confirmation — require above-average volume on the latest candle for signal strength
+        val volumes = candles.map(Candle::volume)
+        val avgVolume = if (volumes.size >= 20) volumes.dropLast(1).takeLast(20).average() else 0.0
+        val latestVolume = volumes.lastOrNull() ?: 0.0
+        val volumeConfirmed = avgVolume > 0 && latestVolume > avgVolume * 1.2
+        if (!volumeConfirmed && avgVolume > 0) {
+            conflicts += "Volume below recent average — signal needs confirmation."
+        }
+
         // Candlestick pattern recognition
         val patterns = CandlestickPatternDetector.detect(candles)
         patterns.forEach { pattern ->
@@ -142,6 +151,18 @@ object AnalysisEngine {
             Direction.SELL -> kotlin.math.abs(price - target!!)
             Direction.WAIT -> 0.0
         }
+        // Trailing stop: recent swing structure level, or 2x ATR beyond price if no swing data.
+        val trailingStop = when (direction) {
+            Direction.BUY -> {
+                val recentSwingLow = structure?.swingLows?.lastOrNull()?.takeIf { it < price }
+                (recentSwingLow ?: price - 2.0 * atr).coerceAtMost(price - 1.5 * atr)
+            }
+            Direction.SELL -> {
+                val recentSwingHigh = structure?.swingHighs?.lastOrNull()?.takeIf { it > price }
+                (recentSwingHigh ?: price + 2.0 * atr).coerceAtLeast(price + 1.5 * atr)
+            }
+            Direction.WAIT -> null
+        }
         val calculatedRR = if (riskDistance > 0.0) rewardDistance / riskDistance else null
         val reason = when (direction) {
             Direction.BUY -> "Bullish conditions meet the evidence threshold. This is a technical assessment, not a probability or trade instruction."
@@ -153,6 +174,7 @@ object AnalysisEngine {
             reason, evidence, conflicts, latest, structure, zones, entry, stop, target,
             calculatedRR,
             instrument = dataset.instrument,
+            trailingStop = trailingStop,
         )
     }
 

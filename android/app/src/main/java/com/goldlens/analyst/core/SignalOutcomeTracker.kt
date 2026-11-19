@@ -47,6 +47,19 @@ object SignalOutcomeTracker {
         }
     }
 
+    /** Mark signals older than maxAgeMillis as EXPIRED if still unresolved. Call periodically. */
+    fun expireStaleSignals(maxAgeMillis: Long = 24L * 60L * 60L * 1000L, nowMillis: Long = System.currentTimeMillis()): Int {
+        var expired = 0
+        records.values.forEach { symbolRecords ->
+            symbolRecords.filter { it.outcome == null && (nowMillis - it.openedAtMillis) > maxAgeMillis }.forEach { record ->
+                record.outcome = Outcome.EXPIRED
+                record.closedAtMillis = nowMillis
+                expired++
+            }
+        }
+        return expired
+    }
+
     fun winRate(symbol: String? = null): Double? {
         val all = if (symbol != null) records[symbol] ?: return null else records.values.flatten()
         val closed = all.filter { it.outcome != null }

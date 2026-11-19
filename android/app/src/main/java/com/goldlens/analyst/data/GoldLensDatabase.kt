@@ -121,6 +121,26 @@ data class AlertRuleEntity(
     @ColumnInfo(name = "last_fired_millis") val lastFiredMillis: Long? = null,
 )
 
+@Entity(tableName = "signal_outcomes", indices = [
+    Index(value = ["symbol", "opened_at_millis"]),
+    Index(value = ["outcome"]),
+])
+data class SignalOutcomeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val symbol: String,
+    val timeframe: String,
+    val direction: String,
+    val entry: Double?,
+    val stopLoss: Double?,
+    val takeProfit: Double?,
+    val score: Int,
+    val rewardRisk: Double?,
+    @ColumnInfo(name = "opened_at_millis") val openedAtMillis: Long,
+    val outcome: String?,
+    @ColumnInfo(name = "closed_at_millis") val closedAtMillis: Long?,
+    val exitPrice: Double?,
+)
+
 @Dao
 interface CandleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -196,10 +216,25 @@ interface AlertDao {
     suspend fun markFired(id: Long, firedAt: Long)
 }
 
+@Dao
+interface SignalOutcomeDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(outcome: SignalOutcomeEntity): Long
+
+    @Query("SELECT * FROM signal_outcomes WHERE symbol = :symbol ORDER BY opened_at_millis DESC LIMIT :limit")
+    suspend fun history(symbol: String, limit: Int): List<SignalOutcomeEntity>
+
+    @Query("SELECT * FROM signal_outcomes ORDER BY opened_at_millis DESC LIMIT :limit")
+    suspend fun all(limit: Int): List<SignalOutcomeEntity>
+
+    @Query("UPDATE signal_outcomes SET outcome = :outcome, closed_at_millis = :closedAt, exit_price = :exitPrice WHERE id = :id")
+    suspend fun updateOutcome(id: Long, outcome: String?, closedAt: Long?, exitPrice: Double?)
+}
+
 @Database(
     entities = [CandleEntity::class, AnalysisEntity::class, ZoneEntity::class, JournalEntity::class,
-        BacktestEntity::class, SettingEntity::class, AlertRuleEntity::class],
-    version = 3,
+        BacktestEntity::class, SettingEntity::class, AlertRuleEntity::class, SignalOutcomeEntity::class],
+    version = 4,
     exportSchema = false,
 )
 abstract class GoldLensDatabase : RoomDatabase() {
@@ -209,6 +244,7 @@ abstract class GoldLensDatabase : RoomDatabase() {
     abstract fun backtestDao(): BacktestDao
     abstract fun settingDao(): SettingDao
     abstract fun alertDao(): AlertDao
+    abstract fun signalOutcomeDao(): SignalOutcomeDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -223,10 +259,33 @@ abstract class GoldLensDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS signal_outcomes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        direction TEXT NOT NULL,
+                        entry REAL,
+                        stop_loss REAL,
+                        take_profit REAL,
+                        score INTEGER NOT NULL,
+                        reward_risk REAL,
+                        opened_at_millis INTEGER NOT NULL,
+                        outcome TEXT,
+                        closed_at_millis INTEGER,
+                        exit_price REAL
+                    )""")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_signal_outcomes_symbol_opened_at_millis ON signal_outcomes (symbol, opened_at_millis)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_signal_outcomes_outcome ON signal_outcomes (outcome)")
+            }
+        }
+
         @Volatile private var instance: GoldLensDatabase? = null
         fun get(context: Context): GoldLensDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, GoldLensDatabase::class.java, "goldlens-local.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
     }

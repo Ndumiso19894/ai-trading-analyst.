@@ -99,12 +99,14 @@ class YahooFinanceChartProvider(
         if (requestedCandles.isEmpty()) throw MarketDataException("Provider supplied no complete, closed $timeframe candles for $instrument.")
         val referencePrice = meta.finiteDouble("regularMarketPrice")
         val referenceTimestamp = meta.optLong("regularMarketTime", -1L).takeIf { it > 0 }?.times(1_000L)
+        // Never expose Yahoo-specific ticker format (e.g. EURUSD=X) in UI-facing labels.
+        val cleanSymbol = instrument.replace("=X", "").replace("/", "")
         return ProviderMarketSnapshot(
             instrument = instrument,
             timeframe = timeframe,
             candles = requestedCandles,
             source = DataSourceKind.HISTORICAL,
-            sourceLabel = "Market data provider — historical/reference data · $displayName · ${meta.optString("symbol", ticker)}",
+            sourceLabel = "Market data provider — historical/reference data · $instrument · $displayName",
             fetchedAtMillis = fetchedAtMillis,
             sourcePrecision = sourcePrecision,
             providerReferencePrice = referencePrice,

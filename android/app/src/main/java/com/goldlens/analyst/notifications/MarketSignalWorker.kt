@@ -24,8 +24,10 @@ import com.goldlens.analyst.core.InstrumentPrice
 import com.goldlens.analyst.core.InstrumentRegistry
 import com.goldlens.analyst.core.MarketDataset
 import com.goldlens.analyst.core.MultiTimeframeAnalyzer
+import com.goldlens.analyst.core.CorrelationMatrix
 import com.goldlens.analyst.core.SignalOutcomeTracker
 import com.goldlens.analyst.data.GoldLensDatabase
+import com.goldlens.analyst.data.SignalOutcomeEntity
 import com.goldlens.analyst.data.replaceCandleSet
 import com.goldlens.analyst.data.saveAnalysis
 import com.goldlens.analyst.data.toCandle
@@ -48,10 +50,18 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         var fetched = 0
         var failures = 0
         val failureNotes = mutableListOf<String>()
+        val firedGroups = mutableSetOf<Int>() // correlation groups already with a signal this cycle
+        val interRequestDelayMillis = 800L // throttle Yahoo requests to avoid rate limiting
 
         for (instrument in InstrumentRegistry.instruments) {
             if (!prefs.getBoolean(KEY_ENABLED, false)) break
             try {
+                // Correlation filter: suppress if a correlated instrument already fired a signal
+                val groupIdx = CorrelationMatrix.groupIndex(instrument.symbol)
+                if (groupIdx != null && firedGroups.contains(groupIdx)) {
+                    Log.i(TAG, "Suppressing ${instrument.symbol} — correlated group $groupIdx already has a signal this cycle.")
+                    continue
+                }
                 val snapshot = fetchWithRetry(provider, instrument.symbol, timeframe)
                 val existingCandles = withContext(Dispatchers.IO) {
                     database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
@@ -74,7 +84,9 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                 val lastCandleMillis = snapshot.candles.lastOrNull()?.timestampMillis
                 val existingLatest = existingCandles.firstOrNull()?.timestampMillis
                 val newClosedCandle = lastCandleMillis != null && existingLatest != lastCandleMillis
-                if (newClosedCandle && mergedCandles.size > existingCandles.size) {
+                if (newClosedCandle) {
+                    // Persist whenever a new closed candle arrived, even if the 1000-candle
+                    // cap means mergedCandles.size == existingCandles.size (oldest dropped, newest kept).
                     database.replaceCandleSet(
                         timeframe, mergedCandles, instrument.symbol, snapshot.source,
                         snapshot.sourceLabel, snapshot.sourcePrecision,
@@ -82,17 +94,30 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                     database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() })
                 }
 
-                deliverSignal(instrument.symbol, timeframe, result, dataset, prefs)
+                deliverSignal(database, instrument.symbol, timeframe, result, dataset, prefs)
+                if (result.direction != Direction.WAIT) {
+                    groupIdx?.let { firedGroups += it }
+                }
                 fetched++
+                // Rate limit between instruments to avoid provider throttling on 14 sequential requests.
+                if (instrument != InstrumentRegistry.instruments.last()) {
+                    withContext(Dispatchers.IO) { delay(interRequestDelayMillis) }
+                }
             } catch (error: Exception) {
-                if (error is kotlinx.coroutines.CancellationException) throw error
-                failures++
-                failureNotes += "${instrument.symbol}: ${error.message ?: "unavailable"}"
-                Log.w(TAG, "Background scan failed for ${instrument.symbol}: ${error.message}")
-            }
+            // TimeoutCancellationException is a CancellationException but must NOT kill the whole scan;
+            // treat it as a regular per-instrument failure so remaining symbols still get processed.
+            if (error is kotlinx.coroutines.CancellationException &&
+                error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+            failures++
+            failureNotes += "${instrument.symbol}: ${error.message ?: "unavailable"}"
+            Log.w(TAG, "Background scan failed for ${instrument.symbol}: ${error.message}")
+        }
         }
 
-        val summary = "Background scan ${Instant.now()} · refreshed $fetched/${InstrumentRegistry.instruments.size} instruments · $failures unavailable · $timeframe"
+        // Expire signals older than 24h that were never resolved, keeping win-rate math accurate.
+        val expiredCount = SignalOutcomeTracker.expireStaleSignals()
+
+        val summary = "Background scan ${Instant.now()} · refreshed $fetched/${InstrumentRegistry.instruments.size} instruments · $failures unavailable · $timeframe · ${expiredCount} expired"
         prefs.edit().putString(KEY_LAST_STATUS, summary).apply()
         if (fetched == 0) {
             Log.w(TAG, "No market symbols refreshed: ${failureNotes.take(3).joinToString()}")
@@ -102,7 +127,8 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         Result.success()
     }
 
-    private fun deliverSignal(
+    private suspend fun deliverSignal(
+        database: com.goldlens.analyst.data.GoldLensDatabase,
         symbol: String,
         timeframe: String,
         result: com.goldlens.analyst.core.AnalysisResult,
@@ -119,7 +145,7 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         }
         val text = signalMessage(symbol, timeframe, result, dataset, prefs)
 
-        // Record signal for outcome tracking
+        // Record signal for outcome tracking (in-memory + Room persistence)
         SignalOutcomeTracker.recordSignal(
             symbol = symbol,
             timeframe = timeframe,
@@ -129,6 +155,22 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
             takeProfit = result.takeProfit,
             score = result.score,
             rewardRisk = result.rewardRisk,
+        )
+        database.signalOutcomeDao().insert(
+            SignalOutcomeEntity(
+                symbol = symbol,
+                timeframe = timeframe,
+                direction = result.direction.name,
+                entry = result.entry,
+                stopLoss = result.stopLoss,
+                takeProfit = result.takeProfit,
+                score = result.score,
+                rewardRisk = result.rewardRisk,
+                openedAtMillis = System.currentTimeMillis(),
+                outcome = null,
+                closedAtMillis = null,
+                exitPrice = null,
+            )
         )
 
         if (SignalDeliveryPolicy.shouldDeliver(prefs.getString(localStateKey, null), result.direction) && postLocalNotification(symbol, timeframe, result.direction, text)) {
@@ -168,9 +210,9 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
                     result.stopLoss?.let { append("Stop: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
                     result.takeProfit?.let { append("Target: ${InstrumentPrice.format(it, symbol, dataset.sourcePrecision)}\n") }
                     append("R:R ${result.rewardRisk?.let { "%.2f".format(it) } ?: "—"} · Score ${result.score}\n")
-                    append(result.reason)
+                    append(result.reason.take(500)) // keep under Telegram's 1024-char caption limit
                 }
-                TelegramNotifier.sendPhoto(token, chatId, pngBytes, caption.toString())
+                TelegramNotifier.sendPhoto(token, chatId, pngBytes, caption.toString().take(1024))
                 prefs.edit().putString(telegramStateKey, result.direction.name).putString(KEY_TELEGRAM_STATUS, "Telegram: chart signal sent at ${Instant.now()}.").apply()
             } catch (error: Exception) {
                 prefs.edit().putString(KEY_TELEGRAM_STATUS, "Telegram chart failed: ${error.message ?: "check token/chat ID and network"}; falling back to text.").apply()

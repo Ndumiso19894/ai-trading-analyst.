@@ -1,5 +1,6 @@
 package com.goldlens.analyst.core
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -28,6 +29,14 @@ object SessionFilter {
     fun currentSession(nowMillis: Long = System.currentTimeMillis()): SessionInfo {
         val zdt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), ZoneId.of("UTC"))
         val hour = zdt.hour
+        val dayOfWeek = zdt.dayOfWeek
+
+        // Forex is closed Friday ~22:00 UTC through Sunday ~22:00 UTC.
+        if (dayOfWeek == DayOfWeek.SATURDAY ||
+            (dayOfWeek == DayOfWeek.SUNDAY && hour < 22)) {
+            return SessionInfo(Session.CLOSED, false,
+                "Weekend — market closed until Sunday 22:00 UTC.")
+        }
 
         return when {
             hour in 13 until 17 -> SessionInfo(Session.OVERLAP, true,
