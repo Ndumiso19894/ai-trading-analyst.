@@ -189,7 +189,7 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
 
     /** Fetch with 10s timeout and one retry after 2s backoff. */
     private suspend fun fetchWithRetry(provider: YahooFinanceChartProvider, symbol: String, timeframe: String): com.goldlens.analyst.data.market.ProviderMarketSnapshot {
-        return withContext(Dispatchers.IO.withTimeout(10_000L)) {
+        return withTimeout(10_000L) {
             runCatching { provider.fetch(symbol, timeframe) }.getOrElse { firstError ->
                 Log.w(TAG, "First fetch failed for $symbol: ${firstError.message}, retrying...")
                 withContext(Dispatchers.IO) { delay(2_000L) }
