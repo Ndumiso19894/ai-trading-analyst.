@@ -32,8 +32,14 @@ object AnalysisEngine {
             val hasRecentGap = recent.zipWithNext().any { (a, b) -> b.timestampMillis - a.timestampMillis > expectedInterval * 2 }
             if (hasRecentGap) return wait(dataset, last.close, last.timestampMillis, "Recent candle gaps make the market sequence incomplete; no directional signal issued.", zones, structure, latest)
         }
-        if (candles.size < 100 || latest.ema200 == null || latest.atr14 == null) {
-            return wait(dataset, last.close, last.timestampMillis, "At least 200 valid candles are required for the full EMA trend assessment.", zones, structure, latest)
+        // Timeframe-aware minimum: focus on recent candles, not ancient history.
+        val minCandlesByTimeframe = mapOf(
+            "5m" to 60, "15m" to 60, "30m" to 60,
+            "1h" to 50, "4h" to 40, "1d" to 30,
+        )
+        val minCandles = minCandlesByTimeframe[dataset.timeframe.lowercase()] ?: 50
+        if (candles.size < minCandles || latest.atr14 == null) {
+            return wait(dataset, last.close, last.timestampMillis, "At least $minCandles valid candles are required for analysis.", zones, structure, latest)
         }
 
         var score = 0
@@ -43,13 +49,23 @@ object AnalysisEngine {
         val ema20 = latest.ema20!!
         val ema50 = latest.ema50!!
         val ema100 = latest.ema100!!
-        val ema200 = latest.ema200!!
-        val emaAlignedUp = ema20 > ema50 && ema50 > ema100 && ema100 > ema200 && price > ema20
-        val emaAlignedDown = ema20 < ema50 && ema50 < ema100 && ema100 < ema200 && price < ema20
+        // Use EMA200 only if available; don't force 200+ bars of ancient history.
+        val ema200 = latest.ema200
+
+        // Recent EMA alignment — check the last 5 candles for sustained alignment,
+        // focusing on current trend rather than old history.
+        val recentIndicators = allIndicators.takeLast(5)
+        val recentBullish = recentIndicators.filter { it.ema20 != null && it.ema50 != null && it.ema100 != null }
+            .count { it.ema20!! > it.ema50!! && it.ema50!! > it.ema100!! }
+        val recentBearish = recentIndicators.filter { it.ema20 != null && it.ema50 != null && it.ema100 != null }
+            .count { it.ema20!! < it.ema50!! && it.ema50!! < it.ema100!! }
+
+        val emaTrendUp = recentBullish >= 3 && price > ema20 && (ema200 == null || price > ema200)
+        val emaTrendDown = recentBearish >= 3 && price < ema20 && (ema200 == null || price < ema200)
         when {
-            emaAlignedUp -> { score++; evidence += "Price and EMA 20/50/100/200 are aligned upward." }
-            emaAlignedDown -> { score--; evidence += "Price and EMA 20/50/100/200 are aligned downward." }
-            else -> conflicts += "EMA trend alignment is mixed."
+            emaTrendUp -> { score += 2; evidence += "Recent EMA 20/50/100 aligned upward — current trend is bullish." }
+            emaTrendDown -> { score -= 2; evidence += "Recent EMA 20/50/100 aligned downward — current trend is bearish." }
+            else -> conflicts += "EMA trend is mixed — no clear directional bias."
         }
 
         val rsi = latest.rsi14

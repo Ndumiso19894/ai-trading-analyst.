@@ -25,6 +25,7 @@ import com.goldlens.analyst.core.InstrumentRegistry
 import com.goldlens.analyst.core.MarketDataset
 import com.goldlens.analyst.core.MultiTimeframeAnalyzer
 import com.goldlens.analyst.core.CorrelationMatrix
+import com.goldlens.analyst.core.MultiTimeframeAnalyzer
 import com.goldlens.analyst.core.SignalOutcomeTracker
 import com.goldlens.analyst.data.GoldLensDatabase
 import com.goldlens.analyst.data.SignalOutcomeEntity
@@ -44,7 +45,6 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_ENABLED, false)) return@withContext Result.success()
 
-        val timeframe = prefs.getString("timeframe", "1h") ?: "1h"
         val provider = YahooFinanceChartProvider()
         val database = GoldLensDatabase.get(applicationContext)
         var fetched = 0
@@ -53,71 +53,78 @@ class MarketSignalWorker(context: Context, params: WorkerParameters) : Coroutine
         val firedGroups = mutableSetOf<Int>() // correlation groups already with a signal this cycle
         val interRequestDelayMillis = 800L // throttle Yahoo requests to avoid rate limiting
 
+        // All supported timeframes are auto-downloaded and analyzed — not just the user's
+        // selected chart timeframe. This ensures the multi-timeframe gate has fresh data
+        // for every frame and signals are generated on each instrument/timeframe combo.
+        val allTimeframes = listOf("5m", "15m", "30m", "1h", "4h", "1d")
+
         for (instrument in InstrumentRegistry.instruments) {
             if (!prefs.getBoolean(KEY_ENABLED, false)) break
-            try {
-                // Correlation filter: suppress if a correlated instrument already fired a signal
-                val groupIdx = CorrelationMatrix.groupIndex(instrument.symbol)
-                if (groupIdx != null && firedGroups.contains(groupIdx)) {
-                    Log.i(TAG, "Suppressing ${instrument.symbol} — correlated group $groupIdx already has a signal this cycle.")
-                    continue
-                }
-                val snapshot = fetchWithRetry(provider, instrument.symbol, timeframe)
-                val existingCandles = withContext(Dispatchers.IO) {
-                    database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
-                }
-                val mergedCandles = mergeCandles(existingCandles.map { it.toCandle() }, snapshot.candles)
-                val dataset = MarketDataset(
-                    candles = mergedCandles,
-                    source = snapshot.source,
-                    sourceLabel = snapshot.sourceLabel,
-                    timeframe = timeframe,
-                    loadedAtMillis = snapshot.fetchedAtMillis,
-                    instrument = instrument.symbol,
-                    sourcePrecision = snapshot.sourcePrecision,
-                )
-                val result = withContext(Dispatchers.Default) {
-                    val base = AnalysisEngine.analyze(dataset)
-                    MultiTimeframeAnalyzer.applyGate(base, MultiTimeframeAnalyzer.analyze(dataset))
-                }
-
-                val lastCandleMillis = snapshot.candles.lastOrNull()?.timestampMillis
-                val existingLatest = existingCandles.firstOrNull()?.timestampMillis
-                val newClosedCandle = lastCandleMillis != null && existingLatest != lastCandleMillis
-                if (newClosedCandle) {
-                    // Persist whenever a new closed candle arrived, even if the 1000-candle
-                    // cap means mergedCandles.size == existingCandles.size (oldest dropped, newest kept).
-                    database.replaceCandleSet(
-                        timeframe, mergedCandles, instrument.symbol, snapshot.source,
-                        snapshot.sourceLabel, snapshot.sourcePrecision,
+            for (timeframe in allTimeframes) {
+                if (!prefs.getBoolean(KEY_ENABLED, false)) break
+                try {
+                    // Correlation filter: suppress if a correlated instrument already fired a signal
+                    // for this timeframe.
+                    val groupIdx = CorrelationMatrix.groupIndex(instrument.symbol)
+                    if (groupIdx != null && firedGroups.contains(groupIdx)) {
+                        Log.i(TAG, "Suppressing ${instrument.symbol} · $timeframe — correlated group $groupIdx already has a signal this cycle.")
+                        continue
+                    }
+                    val snapshot = fetchWithRetry(provider, instrument.symbol, timeframe)
+                    val existingCandles = withContext(Dispatchers.IO) {
+                        database.candleDao().latest(instrument.symbol, timeframe, 1000).asReversed()
+                    }
+                    val mergedCandles = mergeCandles(existingCandles.map { it.toCandle() }, snapshot.candles)
+                    val dataset = MarketDataset(
+                        candles = mergedCandles,
+                        source = snapshot.source,
+                        sourceLabel = snapshot.sourceLabel,
+                        timeframe = timeframe,
+                        loadedAtMillis = snapshot.fetchedAtMillis,
+                        instrument = instrument.symbol,
+                        sourcePrecision = snapshot.sourcePrecision,
                     )
-                    database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() })
-                }
+                    val result = withContext(Dispatchers.Default) {
+                        val base = AnalysisEngine.analyze(dataset)
+                        MultiTimeframeAnalyzer.applyGate(base, MultiTimeframeAnalyzer.analyze(dataset))
+                    }
 
-                deliverSignal(database, instrument.symbol, timeframe, result, dataset, prefs)
-                if (result.direction != Direction.WAIT) {
-                    groupIdx?.let { firedGroups += it }
-                }
-                fetched++
-                // Rate limit between instruments to avoid provider throttling on 14 sequential requests.
-                if (instrument != InstrumentRegistry.instruments.last()) {
+                    val lastCandleMillis = snapshot.candles.lastOrNull()?.timestampMillis
+                    val existingLatest = existingCandles.firstOrNull()?.timestampMillis
+                    val newClosedCandle = lastCandleMillis != null && existingLatest != lastCandleMillis
+                    if (newClosedCandle) {
+                        // Persist whenever a new closed candle arrived, even if the 1000-candle
+                        // cap means mergedCandles.size == existingCandles.size (oldest dropped, newest kept).
+                        database.replaceCandleSet(
+                            timeframe, mergedCandles, instrument.symbol, snapshot.source,
+                            snapshot.sourceLabel, snapshot.sourcePrecision,
+                        )
+                        database.saveAnalysis(result.toEntity(), result.zones.map { it.toEntity() })
+                    }
+
+                    deliverSignal(database, instrument.symbol, timeframe, result, dataset, prefs)
+                    if (result.direction != Direction.WAIT) {
+                        groupIdx?.let { firedGroups += it }
+                    }
+                    fetched++
+                    // Rate limit between requests to avoid provider throttling.
                     withContext(Dispatchers.IO) { delay(interRequestDelayMillis) }
+                } catch (error: Exception) {
+                    // TimeoutCancellationException is a CancellationException but must NOT kill the whole scan;
+                    // treat it as a regular per-instrument failure so remaining symbols/timeframes still get processed.
+                    if (error is kotlinx.coroutines.CancellationException &&
+                        error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+                    failures++
+                    failureNotes += "${instrument.symbol} · $timeframe: ${error.message ?: "unavailable"}"
+                    Log.w(TAG, "Background scan failed for ${instrument.symbol} · $timeframe: ${error.message}")
                 }
-            } catch (error: Exception) {
-            // TimeoutCancellationException is a CancellationException but must NOT kill the whole scan;
-            // treat it as a regular per-instrument failure so remaining symbols still get processed.
-            if (error is kotlinx.coroutines.CancellationException &&
-                error !is kotlinx.coroutines.TimeoutCancellationException) throw error
-            failures++
-            failureNotes += "${instrument.symbol}: ${error.message ?: "unavailable"}"
-            Log.w(TAG, "Background scan failed for ${instrument.symbol}: ${error.message}")
-        }
+            }
         }
 
         // Expire signals older than 24h that were never resolved, keeping win-rate math accurate.
         val expiredCount = SignalOutcomeTracker.expireStaleSignals()
 
-        val summary = "Background scan ${Instant.now()} · refreshed $fetched/${InstrumentRegistry.instruments.size} instruments · $failures unavailable · $timeframe · ${expiredCount} expired"
+        val summary = "Background scan ${Instant.now()} · refreshed $fetched instrument/timeframes · $failures unavailable · all timeframes · ${expiredCount} expired"
         prefs.edit().putString(KEY_LAST_STATUS, summary).apply()
         if (fetched == 0) {
             Log.w(TAG, "No market symbols refreshed: ${failureNotes.take(3).joinToString()}")
