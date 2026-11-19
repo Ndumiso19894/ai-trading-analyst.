@@ -138,7 +138,7 @@ data class SignalOutcomeEntity(
     @ColumnInfo(name = "opened_at_millis") val openedAtMillis: Long,
     val outcome: String?,
     @ColumnInfo(name = "closed_at_millis") val closedAtMillis: Long?,
-    val exitPrice: Double?,
+    @ColumnInfo(name = "exit_price") val exitPrice: Double?,
 )
 
 @Dao
